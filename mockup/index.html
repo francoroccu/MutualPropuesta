@@ -1,0 +1,1090 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Middleware AMR</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Open+Sans:wght@400;600;700&family=Source+Code+Pro:wght@400;600&display=swap">
+<style>
+/* Layout: banda de marca + barra de etapas fija (el "viaje del dato") + paneles por etapa con un socio seleccionado que atraviesa todo */
+:root{
+  --navy:#1a2332; --blue:#2563eb; --cyan:#06b6d4; --green:#10b981; --orange:#f59e0b; --red:#e5484d;
+  --bg:#f4f6f9; --surface:#ffffff; --surface2:#f7f8fa; --line:#e2e7ef; --fg:#1a2332; --muted:#5b6678;
+  --blue-soft:rgba(37,99,235,.09); --cyan-soft:rgba(6,182,212,.12); --green-soft:rgba(16,185,129,.12); --orange-soft:rgba(245,158,11,.14); --red-soft:rgba(229,72,77,.12);
+  --code-bg:#0f1724; --code-fg:#d6e2f5; --code-key:#7cc4ff; --code-str:#9be3b0; --code-num:#ffcf7a;
+  --woow:#6d3df5; --woow-soft:rgba(109,61,245,.10); --wise:#0e9f8a; --wise-soft:rgba(14,159,138,.11);
+  --f-head:"Montserrat","Arial Black",Arial,sans-serif; --f-body:"Open Sans",Arial,sans-serif; --f-mono:"Source Code Pro",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1420; --surface:#151d2b; --surface2:#1a2333; --line:#263247; --fg:#e7edf6; --muted:#97a3b8;
+  --blue:#5b8cff; --blue-soft:rgba(91,140,255,.14); --cyan-soft:rgba(6,182,212,.16); --green-soft:rgba(16,185,129,.16); --orange-soft:rgba(245,158,11,.16); --red-soft:rgba(229,72,77,.18);
+  --code-bg:#0a0f18; --woow:#9d7bff; --woow-soft:rgba(157,123,255,.14); --wise:#2cc6ad; --wise-soft:rgba(44,198,173,.14); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1420; --surface:#151d2b; --surface2:#1a2333; --line:#263247; --fg:#e7edf6; --muted:#97a3b8;
+  --blue:#5b8cff; --blue-soft:rgba(91,140,255,.14); --cyan-soft:rgba(6,182,212,.16); --green-soft:rgba(16,185,129,.16); --orange-soft:rgba(245,158,11,.16); --red-soft:rgba(229,72,77,.18);
+  --code-bg:#0a0f18; --woow:#9d7bff; --woow-soft:rgba(157,123,255,.14); --wise:#2cc6ad; --wise-soft:rgba(44,198,173,.14); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.5}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:#1a2332}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3,h4{font-family:var(--f-head);margin:0;text-wrap:balance;letter-spacing:-.01em}
+.mono{font-family:var(--f-mono)}
+.tab-num{font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+/* Banda */
+.hero{background:linear-gradient(135deg,#1a2332 0%,#1f3a7a 60%,#2563eb 100%);color:#fff}
+.hero .wrap{padding-block:22px 18px;display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end;justify-content:space-between}
+.brand{font-family:var(--f-head);font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase;opacity:.75}
+.hero h1{font-size:clamp(22px,3vw,30px);font-weight:800;margin-top:4px}
+.hero p{margin:6px 0 0;max-width:62ch;opacity:.85}
+.tag-test{display:inline-block;background:rgba(245,158,11,.22);color:#ffd88a;border:1px solid rgba(245,158,11,.45);font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:99px;margin-left:8px;vertical-align:middle}
+.picker{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);padding:10px;border-radius:10px}
+.picker label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;opacity:.8;width:100%}
+.picker input{width:260px;max-width:100%;padding:8px 10px;border-radius:6px;border:0;background:#fff;color:#1a2332;font-family:var(--f-body)}
+.picker .nav{background:rgba(255,255,255,.14);color:#fff;border:0;border-radius:6px;padding:8px 10px}
+.btn{background:var(--blue);color:#fff;border:0;border-radius:6px;padding:9px 14px;font-weight:600;display:inline-flex;align-items:center;gap:8px}
+.btn.ghost{background:transparent;color:var(--blue);border:1px solid var(--blue)}
+.btn.small{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.5;cursor:default}
+.hero .btn{background:#fff;color:#1a2332}
+
+/* Barra de etapas */
+.stages{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
+.stages .wrap{display:flex;gap:4px;overflow-x:auto;padding-block:8px;scrollbar-width:thin}
+.stage{flex:1 0 auto;display:flex;align-items:center;gap:8px;border:0;background:transparent;color:var(--muted);padding:8px 12px;border-radius:8px;text-align:left;white-space:nowrap;position:relative}
+.stage .n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-head);font-weight:700;font-size:12px;background:var(--surface2);border:1px solid var(--line);color:var(--muted);flex:none}
+.stage b{display:block;font-family:var(--f-head);font-size:13px;color:var(--fg);font-weight:600}
+.stage small{display:block;font-size:11px}
+.stage:hover{background:var(--surface2)}
+.stage.on{background:var(--blue-soft)}
+.stage.on .n{background:var(--blue);border-color:var(--blue);color:#fff}
+.stage.done .n{background:var(--green);border-color:var(--green);color:#fff}
+.stage.pulse .n{animation:pulse 0.9s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 6px var(--blue-soft)}}
+.stage:not(:last-child)::after{content:"›";color:var(--line);font-size:18px;margin-left:6px}
+
+main .wrap{padding-block:22px 48px}
+.panel{display:none}
+.panel.on{display:block}
+.intro{display:flex;flex-wrap:wrap;gap:16px;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+.intro h2{font-size:22px;font-weight:700}
+.intro p{margin:4px 0 0;color:var(--muted);max-width:75ch}
+.eyebrow{font-family:var(--f-head);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--blue)}
+.grid{display:grid;gap:16px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr))}
+.g-side{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+@media (max-width:900px){.g-side{grid-template-columns:minmax(0,1fr)}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card h3{font-size:14px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h3 .sub{font-family:var(--f-body);font-weight:400;color:var(--muted);font-size:12px}
+.muted{color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--surface2);border:1px solid var(--line);color:var(--fg);white-space:nowrap}
+.chip.blue{background:var(--blue-soft);border-color:transparent;color:var(--blue)}
+.chip.cyan{background:var(--cyan-soft);border-color:transparent;color:#0891b2}
+.chip.green{background:var(--green-soft);border-color:transparent;color:#059669}
+.chip.orange{background:var(--orange-soft);border-color:transparent;color:#b45309}
+.chip.red{background:var(--red-soft);border-color:transparent;color:var(--red)}
+.chip.woow{background:var(--woow-soft);border-color:transparent;color:var(--woow)}
+.chip.wise{background:var(--wise-soft);border-color:transparent;color:var(--wise)}
+:root:not([data-theme="light"]) .chip.cyan{color:var(--cyan)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+
+/* Tablas */
+.tbl-wrap{overflow:auto;max-height:440px;border:1px solid var(--line);border-radius:8px}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th{position:sticky;top:0;background:var(--surface2);text-align:left;font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;z-index:1}
+td{padding:7px 10px;border-bottom:1px solid var(--line);white-space:nowrap;font-variant-numeric:tabular-nums}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--surface2)}
+tr.sel td{background:var(--blue-soft)!important}
+td.num,th.num{text-align:right}
+.subtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.subtab{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:6px;padding:6px 12px;font-weight:600;font-size:13px}
+.subtab.on{background:var(--navy);color:#fff;border-color:var(--navy)}
+:root[data-theme="dark"] .subtab.on{background:var(--blue);border-color:var(--blue)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .subtab.on{background:var(--blue);border-color:var(--blue)}}
+.search{padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);min-width:0;width:220px;max-width:100%}
+
+/* Código */
+pre.code{background:var(--code-bg);color:var(--code-fg);font-family:var(--f-mono);font-size:12px;line-height:1.55;padding:14px;border-radius:8px;overflow:auto;max-height:440px;margin:0}
+.code .k{color:var(--code-key)} .code .s{color:var(--code-str)} .code .n{color:var(--code-num)} .code .c{color:#6f7f99}
+.code-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.method{font-family:var(--f-mono);font-size:12px;font-weight:600}
+.method .verb{background:var(--green);color:#fff;padding:1px 6px;border-radius:4px;margin-right:6px}
+.method .verb.put{background:var(--orange)}
+
+/* Flujo */
+.flow{display:flex;align-items:stretch;gap:0;overflow-x:auto;padding:6px 2px 10px}
+.node{flex:1 0 150px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:150px;position:relative;transition:border-color .3s, box-shadow .3s}
+.node .t{font-family:var(--f-head);font-weight:700;font-size:13px}
+.node .d{font-size:12px;color:var(--muted);margin-top:4px}
+.node .k{font-family:var(--f-mono);font-size:11px;color:var(--blue);margin-top:6px}
+.node.active{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.node.ok{border-color:var(--green)}
+.arrow{flex:0 0 34px;display:grid;place-items:center;color:var(--muted);position:relative}
+.arrow svg{width:34px;height:14px}
+.arrow .dot{position:absolute;width:8px;height:8px;border-radius:50%;background:var(--blue);left:0;top:50%;margin-top:-4px;opacity:0}
+.arrow.run .dot{animation:travel .7s linear infinite}
+@keyframes travel{0%{left:0;opacity:1}100%{left:26px;opacity:1}}
+.node.src{border-top:3px solid var(--navy)} .node.mid{border-top:3px solid var(--blue)} .node.dst-w{border-top:3px solid var(--woow)} .node.dst-x{border-top:3px solid var(--wise)}
+
+.log{background:var(--code-bg);color:var(--code-fg);font-family:var(--f-mono);font-size:12px;border-radius:8px;padding:12px;height:260px;overflow:auto;margin:0}
+.log .ok{color:#7ee2b0} .log .warn{color:#ffcf7a} .log .info{color:#7cc4ff} .log .ts{color:#6f7f99}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.kpi{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.kpi .v{font-family:var(--f-head);font-weight:700;font-size:20px;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:11.5px;color:var(--muted)}
+
+/* Reglas */
+.rule{display:grid;grid-template-columns:150px minmax(0,1fr) 24px minmax(0,1fr);gap:10px;align-items:center;padding:9px 0;border-bottom:1px dashed var(--line)}
+.rule:last-child{border-bottom:0}
+.rule .f{font-weight:700;font-size:12.5px}
+.rule .f small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+.rule .a,.rule .b{font-family:var(--f-mono);font-size:12px;padding:5px 8px;border-radius:6px;overflow-wrap:anywhere}
+.rule .a{background:var(--orange-soft)} .rule .b{background:var(--green-soft)}
+.rule .arr{color:var(--muted);text-align:center}
+@media (max-width:640px){.rule{grid-template-columns:minmax(0,1fr)}.rule .arr{display:none}}
+
+.dq{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line)}
+.dq:last-child{border-bottom:0}
+.dq .ic{flex:none;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff}
+.dq .ic.ok{background:var(--green)} .dq .ic.warn{background:var(--orange)}
+.dq b{font-size:13px}
+.dq p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+
+/* Perfil */
+.profile-head{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#1a2332,#2563eb);color:#fff;display:grid;place-items:center;font-family:var(--f-head);font-weight:700;font-size:18px;flex:none}
+.profile-head h3{font-size:19px;margin:0}
+.kv{display:grid;grid-template-columns:minmax(110px,auto) minmax(0,1fr);gap:4px 14px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+.timeline{list-style:none;margin:0;padding:0;position:relative}
+.timeline li{display:grid;grid-template-columns:88px 14px minmax(0,1fr);gap:8px;padding:6px 0;align-items:start}
+.timeline .when{font-family:var(--f-mono);font-size:11.5px;color:var(--muted);padding-top:2px}
+.timeline .pin{width:12px;height:12px;border-radius:50%;margin-top:4px}
+.pin.t{background:var(--cyan)} .pin.p{background:var(--blue)} .pin.x{background:var(--orange)}
+.timeline .what{font-size:13px}
+.timeline .what small{display:block;color:var(--muted);font-size:12px}
+.seg-rule{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);align-items:center}
+.seg-rule:last-child{border-bottom:0}
+.seg-rule .why{font-size:12px;color:var(--muted)}
+.yes{color:var(--green);font-weight:700} .no{color:var(--muted)}
+
+.bars .row{display:grid;grid-template-columns:minmax(120px,190px) minmax(0,1fr) 44px;gap:10px;align-items:center;padding:4px 0;font-size:12.5px;cursor:pointer;border-radius:6px}
+.bars .row:hover{background:var(--surface2)}
+.bars .row.on{background:var(--blue-soft)}
+.bars .track{height:12px;background:var(--surface2);border-radius:3px;overflow:hidden;border:1px solid var(--line)}
+.bars .fill{height:100%;border-radius:2px}
+.bars .cnt{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+
+/* Mock plataformas */
+.app{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.app-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;color:#fff;font-family:var(--f-head);font-weight:700;font-size:13px}
+.app-bar .sim{margin-left:auto;font-family:var(--f-body);font-weight:600;font-size:11px;background:rgba(255,255,255,.18);padding:2px 8px;border-radius:99px}
+.app-bar.w{background:var(--woow)} .app-bar.x{background:var(--wise)}
+.app-body{padding:14px}
+.attr-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.attr{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0}
+.attr .l{font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.attr .v{font-weight:600;font-size:13px;overflow-wrap:anywhere}
+.camp{border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:6px;background:var(--surface)}
+.camp .h{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap}
+.camp .h b{font-family:var(--f-head);font-size:13px}
+.camp .msg{background:var(--surface2);border-radius:8px;padding:8px 10px;font-size:12.5px}
+
+.inbox{display:grid;grid-template-columns:minmax(0,1fr) 270px;min-height:460px}
+@media (max-width:760px){.inbox{grid-template-columns:minmax(0,1fr)}}
+.chat{display:flex;flex-direction:column;border-right:1px solid var(--line);min-width:0}
+.chat-head{padding:10px 14px;border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.chat-body{flex:1;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--surface2);overflow:auto}
+.bub{max-width:80%;padding:8px 11px;border-radius:12px;font-size:13px;line-height:1.4}
+.bub.in{background:var(--surface);border:1px solid var(--line);align-self:flex-start;border-bottom-left-radius:3px}
+.bub.out{background:var(--wise-soft);align-self:flex-end;border-bottom-right-radius:3px}
+.bub.sys{align-self:center;background:transparent;color:var(--muted);font-size:11.5px;text-align:center;max-width:95%}
+.bub .meta{display:block;font-size:10.5px;color:var(--muted);margin-top:3px}
+.chat-input{padding:10px;border-top:1px solid var(--line);display:flex;gap:6px;flex-wrap:wrap}
+.chat-input select{flex:1;min-width:0;padding:8px;border-radius:6px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+.side{padding:14px;display:grid;gap:12px;align-content:start;min-width:0}
+.side h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.trace{font-size:12.5px;display:grid;gap:6px}
+.trace .st{display:flex;gap:8px;align-items:flex-start}
+.trace .st i{font-style:normal;flex:none;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;background:var(--muted)}
+.trace .st.hit i{background:var(--wise)}
+.queue{font-family:var(--f-head);font-weight:800;font-size:18px}
+
+.note{background:var(--blue-soft);border-radius:8px;padding:10px 12px;font-size:13px}
+.note b{color:var(--blue)}
+.steps-tech{counter-reset:s;display:grid;gap:10px;margin:0;padding:0;list-style:none}
+.steps-tech li{counter-increment:s;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px}
+.steps-tech li::before{content:counter(s);width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;display:grid;place-items:center;font-family:var(--f-head);font-weight:700;font-size:12px}
+:root[data-theme="dark"] .steps-tech li::before{background:var(--blue)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .steps-tech li::before{background:var(--blue)}}
+.steps-tech b{font-size:13px} .steps-tech p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--navy);color:#fff;padding:10px 14px;border-radius:8px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:20;max-width:min(380px,calc(100vw - 32px))}
+footer{border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+footer .wrap{padding-block:16px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+:root{--c-soc:#6366f1}
+/* Resumen */
+.compare .card h3{font-size:15px}
+.ticks{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.ticks li{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;font-size:13.5px}
+.ticks li::before{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;color:#fff}
+.ticks.bad li::before{content:"✕";background:var(--red)}
+.ticks.good li::before{content:"✓";background:var(--green)}
+.card.before{border-top:3px solid var(--red)} .card.after{border-top:3px solid var(--green)}
+.bigs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:12px;margin:16px 0}
+.big{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:left;color:var(--fg);display:grid;gap:4px;align-content:start}
+.big:hover{border-color:var(--blue)}
+.big .v{font-family:var(--f-head);font-weight:800;font-size:32px;line-height:1.05;font-variant-numeric:tabular-nums}
+.big .l{font-size:13px;font-weight:600}
+.big .s{font-size:11.5px;color:var(--muted)}
+.big .go{font-size:11.5px;color:var(--blue);font-weight:600;margin-top:4px}
+.calc{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+@media (max-width:760px){.calc{grid-template-columns:minmax(0,1fr)}}
+.field{display:grid;gap:4px;margin-bottom:12px}
+.field label{font-size:12px;font-weight:700;color:var(--muted)}
+.field input,.field select{padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:var(--fg);font:inherit;min-width:0}
+.field input[type=range]{padding:0}
+.field .hint{font-size:11.5px;color:var(--muted)}
+.calc-out{background:linear-gradient(135deg,#1a2332 0%,#2563eb 100%);color:#fff;border-radius:10px;padding:18px;display:grid;gap:12px;align-content:start}
+.calc-out .row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;border-bottom:1px solid rgba(255,255,255,.18);padding-bottom:8px}
+.calc-out .row:last-of-type{border-bottom:0}
+.calc-out .row span{opacity:.8;font-size:13px}
+.calc-out .row b{font-family:var(--f-head);font-size:20px;font-variant-numeric:tabular-nums}
+.calc-out .row.main b{font-size:30px}
+.calc-out .f{font-family:var(--f-mono);font-size:11.5px;opacity:.75}
+/* Monitoreo */
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px}
+.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--green-soft);color:#059669} .pill.warn{background:var(--orange-soft);color:#b45309} .pill.err{background:var(--red-soft);color:var(--red)}
+.modcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:12px;margin-bottom:16px}
+.modcard{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px;text-align:left;color:var(--fg);display:grid;gap:10px}
+.modcard:hover{border-color:var(--blue)}
+.modcard.on{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-soft)}
+.modcard .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.modcard .top b{font-family:var(--f-head);font-size:15px;display:flex;align-items:center;gap:8px}
+.modcard .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+.modcard .nums{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.modcard .nums div{background:var(--surface2);border-radius:6px;padding:6px 8px}
+.modcard .nums .v{font-family:var(--f-head);font-weight:700;font-size:18px;font-variant-numeric:tabular-nums}
+.modcard .nums .l{font-size:11px;color:var(--muted)}
+.modcard .foot{font-size:12px;color:var(--muted)}
+.funnel{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:640px){.funnel{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.funnel > div{background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:10px}
+.funnel .v{font-family:var(--f-head);font-weight:700;font-size:22px;font-variant-numeric:tabular-nums}
+.funnel .l{font-size:11.5px;color:var(--muted)}
+.chart svg{width:100%;height:auto;display:block}
+.chart text{fill:var(--muted);font-size:10px;font-family:var(--f-body)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.st-ok{color:#059669;font-weight:700} .st-warn{color:#b45309;font-weight:700} .st-err{color:var(--red);font-weight:700} .st-na{color:var(--muted)}
+/* Implementación */
+.gantt{display:grid;gap:6px;overflow-x:auto}
+.gantt .gr{display:grid;grid-template-columns:minmax(170px,240px) repeat(8,minmax(44px,1fr));gap:4px;align-items:center;min-width:620px}
+.gantt .gh{font-size:11px;color:var(--muted);font-weight:700;text-align:center}
+.gantt .gl b{display:block;font-size:13px} .gantt .gl small{display:block;font-size:11.5px;color:var(--muted)}
+.gantt .bar{height:22px;border-radius:4px;background:var(--blue)}
+.gantt .cell{height:22px;border-radius:4px;background:var(--surface2)}
+.need{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);align-items:start}
+.need:last-child{border-bottom:0}
+.need b{font-size:13px} .need p{margin:2px 0 0;font-size:12.5px;color:var(--muted)}
+.cta{background:linear-gradient(135deg,#1a2332 0%,#2563eb 100%);color:#fff;border-radius:10px;padding:20px;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+.cta h3{font-size:18px} .cta p{margin:4px 0 0;opacity:.85;max-width:60ch}
+</style>
+
+<header class="hero">
+  <div class="wrap">
+    <div>
+      <div class="brand">Patagonia Digital · Propuesta técnica para Mutual AMR</div>
+      <h1>Middleware AMR <span class="tag-test">Datos de prueba</span></h1>
+      <p>Cómo viaja un socio desde el sistema de gestión hasta WoowUp y Wise CX: extracción, estandarización, perfil unificado y activación, sobre el set real de 100 socios, 138 préstamos y 151 ventas de turismo.</p>
+    </div>
+    <div class="picker">
+      <label for="socioInput">Socio en seguimiento</label>
+      <button class="nav" id="prevS" aria-label="Socio anterior">‹</button>
+      <input id="socioInput" list="socioList" autocomplete="off" placeholder="Buscar por DNI o apellido">
+      <datalist id="socioList"></datalist>
+      <button class="nav" id="nextS" aria-label="Socio siguiente">›</button>
+      <button class="btn" id="runSync">▶ Ejecutar sincronización</button>
+    </div>
+  </div>
+</header>
+
+<nav class="stages" aria-label="Etapas">
+  <div class="wrap" id="stageNav"></div>
+</nav>
+
+<main><div class="wrap">
+
+<!-- 0 RESUMEN -->
+<section class="panel" data-p="resumen">
+  <div class="intro">
+    <div><div class="eyebrow">Resumen</div><h2>Un mismo socio, reconocido en todos los canales</h2>
+    <p>El middleware une los datos de Turismo y Préstamos en un perfil por socio y los entrega a WoowUp para campañas y a Wise CX para la atención. Las cifras de esta página salen del set de prueba compartido por AMR.</p></div>
+  </div>
+  <div class="grid g2 compare">
+    <div class="card before"><h3>Hoy</h3><ul class="ticks bad">
+      <li>Socios, préstamos y turismo están en tablas separadas, unidas solo por el documento.</li>
+      <li>WoowUp y Wise CX no comparten información: quien atiende no ve los préstamos ni los viajes del socio.</li>
+      <li>Al segmentar o atender no se distingue a quien viaja de quien toma préstamos.</li>
+      <li>Sin una capa común, cada campaña requiere cruzar listas a mano.</li>
+      <li>Los problemas de carga (teléfonos, documentos, estados) se descubren tarde.</li>
+    </ul></div>
+    <div class="card after"><h3>Con el middleware</h3><ul class="ticks good">
+      <li>Un perfil único por socio, actualizado cada 15 minutos.</li>
+      <li>WoowUp recibe turismo y préstamos como unidades separadas, con segmentos listos para usar.</li>
+      <li>Wise CX reconoce al socio por WhatsApp y lo deriva a la cola correcta, con su historial a la vista.</li>
+      <li>Campañas automáticas por disparador: renovación, venta cruzada y reactivación.</li>
+      <li>Monitoreo diario por módulo: qué viajó, qué falló y qué se reintentó.</li>
+    </ul></div>
+  </div>
+  <div class="bigs" id="bigNums"></div>
+  <div class="card">
+    <h3>Calculadora de oportunidad <span class="sub">supuestos editables, para completar con los números reales de AMR</span></h3>
+    <div class="calc">
+      <div>
+        <div class="field"><label for="cAud">Audiencia</label><select id="cAud"></select><span class="hint" id="cAudHint"></span></div>
+        <div class="field"><label for="cBase">Cantidad total de socios de AMR</label><input id="cBase" type="number" min="100" step="100" value="100"><span class="hint">El set de prueba tiene 100 socios. Al cargar el total real, la audiencia se proyecta en la misma proporción.</span></div>
+        <div class="field"><label for="cConv">Tasa de conversión de la campaña: <b id="cConvV"></b></label><input id="cConv" type="range" min="1" max="30" step="1" value="5"><span class="hint">Porcentaje de la audiencia que toma el producto ofrecido.</span></div>
+        <div class="field"><label for="cTicket" id="cTicketL">Ticket promedio ($)</label><input id="cTicket" type="number" min="0" step="10000"><span class="hint" id="cTicketHint"></span></div>
+      </div>
+      <div class="calc-out" id="cOut"></div>
+    </div>
+  </div>
+</section>
+
+<!-- 1 ORIGEN -->
+<section class="panel" data-p="origen">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 1 · Origen</div><h2>Sistema de gestión de AMR</h2>
+    <p>Así llegan hoy los datos: tres tablas separadas (socios, préstamos y turismo) unidas solo por el DNI, con teléfonos en formato local y fechas como texto. Haga clic en cualquier fila para seguir a ese socio por todo el recorrido.</p></div>
+  </div>
+  <div class="card">
+    <div class="subtabs" id="srcTabs">
+      <button class="subtab on" data-t="S">Socios <span class="muted" id="cntS"></span></button>
+      <button class="subtab" data-t="P">Préstamos <span class="muted" id="cntP"></span></button>
+      <button class="subtab" data-t="T">Turismo <span class="muted" id="cntT"></span></button>
+      <span style="flex:1"></span>
+      <label class="muted" style="display:flex;gap:6px;align-items:center;font-size:12.5px"><input type="checkbox" id="onlySel"> Solo el socio seleccionado</label>
+      <input class="search" id="srcSearch" placeholder="Filtrar filas…">
+    </div>
+    <div class="tbl-wrap"><table id="srcTable"></table></div>
+  </div>
+</section>
+
+<!-- 2 INGESTA -->
+<section class="panel" data-p="ingesta">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 2 · Ingesta</div><h2>Cómo viaja el dato al middleware</h2>
+    <p>Un flujo orquestado (n8n) lee el sistema de gestión en forma incremental, deja una copia cruda en staging y dispara la estandarización. Ejecute la sincronización completa o simule un cambio en origen para ver cómo se propaga solo el delta.</p></div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <div class="flow" id="flow">
+      <div class="node src" data-n="0"><div class="t">Sistema de gestión AMR</div><div class="d">Socios, préstamos, turismo</div><div class="k">vista SQL / export programado</div></div>
+      <div class="arrow" data-a="0"><svg viewBox="0 0 34 14"><path d="M0 7h30M24 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="dot"></span></div>
+      <div class="node mid" data-n="1"><div class="t">Ingesta n8n</div><div class="d">Lectura incremental cada 15 min</div><div class="k">cursor: updated_at</div></div>
+      <div class="arrow" data-a="1"><svg viewBox="0 0 34 14"><path d="M0 7h30M24 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="dot"></span></div>
+      <div class="node mid" data-n="2"><div class="t">Estandarización</div><div class="d">Limpieza, catálogos, validaciones</div><div class="k">reglas versionadas</div></div>
+      <div class="arrow" data-a="2"><svg viewBox="0 0 34 14"><path d="M0 7h30M24 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="dot"></span></div>
+      <div class="node mid" data-n="3"><div class="t">Perfil unificado</div><div class="d">1 registro por socio + segmentos</div><div class="k">Postgres · golden record</div></div>
+      <div class="arrow" data-a="3"><svg viewBox="0 0 34 14"><path d="M0 7h30M24 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="dot"></span></div>
+      <div class="node dst-w" data-n="4"><div class="t">WoowUp</div><div class="d">Clientes, compras, segmentos</div><div class="k">API v3 · upsert</div></div>
+      <div class="arrow" data-a="4"><svg viewBox="0 0 34 14"><path d="M0 7h30M24 1l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.6"/></svg><span class="dot"></span></div>
+      <div class="node dst-x" data-n="5"><div class="t">Wise CX</div><div class="d">Contacto, campos, ruteo</div><div class="k">API contactos · upsert</div></div>
+    </div>
+  </div>
+  <div class="grid g-side">
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <h3>Registro de ejecución <span class="sub" id="runMeta">Sin ejecutar todavía</span></h3>
+        <pre class="log" id="log"><span class="ts">—</span> Presione «Ejecutar sincronización» para correr el flujo completo sobre el set de datos.</pre>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+          <button class="btn small" id="runSync2">▶ Sincronización completa</button>
+          <button class="btn small ghost" id="simLoan">+ Simular préstamo nuevo para este socio</button>
+          <button class="btn small ghost" id="simTrip">+ Simular venta de turismo para este socio</button>
+          <button class="btn small ghost" id="resetSim" hidden>Deshacer simulaciones</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Resultado de la última corrida</h3>
+        <div class="kpis" id="runKpis"></div>
+      </div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <div class="code-head"><h3 style="margin:0">Extracto crudo del socio <span class="sub">tal como sale del origen</span></h3></div>
+        <pre class="code" id="rawPayload"></pre>
+      </div>
+      <div class="card">
+        <h3>Qué pasa técnicamente</h3>
+        <ol class="steps-tech">
+          <li><div><b>Lectura incremental</b><p>n8n consulta una vista del sistema de gestión (o toma un export CSV/SFTP si no hay acceso a base) filtrando por fecha de modificación. La primera corrida es una carga completa.</p></div></li>
+          <li><div><b>Staging crudo</b><p>Cada lote se guarda tal cual llegó, con hash por fila. Si el hash no cambió, el registro no se reprocesa ni se reenvía.</p></div></li>
+          <li><div><b>Estandarización y perfil</b><p>Se aplican reglas y catálogos, se valida calidad y se recalcula el perfil unificado solo de los socios afectados.</p></div></li>
+          <li><div><b>Distribución</b><p>Upsert por DNI hacia WoowUp y por teléfono E.164 hacia Wise CX. Reintentos con espera creciente y cola de errores para revisión manual.</p></div></li>
+          <li><div><b>Trazabilidad</b><p>Cada envío queda registrado (qué se mandó, cuándo, respuesta de la API) para auditoría y reprocesos.</p></div></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 3 ESTANDARIZACION -->
+<section class="panel" data-p="estandar">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 3 · Estandarización</div><h2>Reglas que convierten el dato crudo en dato utilizable</h2>
+    <p>Cada campo pasa por una regla explícita. Abajo se ven aplicadas al socio seleccionado y, a la derecha, los controles de calidad corridos sobre toda la base.</p></div>
+  </div>
+  <div class="grid g-side">
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>Socio <span class="sub" id="stdWho"></span></h3><div id="rulesSocio"></div></div>
+      <div class="card"><h3>Préstamos del socio <span class="sub">estado y cuotas calculadas a hoy</span></h3><div class="tbl-wrap" style="max-height:300px"><table id="stdLoans"></table></div></div>
+      <div class="card"><h3>Turismo del socio <span class="sub">catálogo de producto normalizado</span></h3><div class="tbl-wrap" style="max-height:300px"><table id="stdTrips"></table></div></div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>Controles de calidad <span class="sub">sobre los 100 socios</span></h3><div id="dqList"></div></div>
+      <div class="card"><h3>Catálogo de campañas de préstamo</h3><div class="tbl-wrap" style="max-height:320px"><table id="catCamp"></table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 4 PERFIL -->
+<section class="panel" data-p="perfil">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 4 · Perfil unificado</div><h2>Un solo registro por socio, con turismo y préstamos juntos</h2>
+    <p>El middleware consolida las tres tablas en un perfil (golden record), calcula indicadores y asigna segmentos con reglas explícitas. Ese perfil es la única fuente que alimenta a WoowUp y a Wise CX.</p></div>
+  </div>
+  <div class="grid g-side">
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <div class="profile-head"><div class="avatar" id="pfAvatar"></div><div><h3 id="pfName"></h3><div class="muted" id="pfSub"></div></div><div class="chips" id="pfGroup" style="margin-left:auto"></div></div>
+        <div class="kpis" id="pfKpis" style="margin-top:14px"></div>
+      </div>
+      <div class="card"><h3>Historia unificada <span class="sub">préstamos y viajes en una sola línea de tiempo</span></h3><ul class="timeline" id="pfTimeline"></ul></div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>Segmentos asignados <span class="sub">regla → resultado para este socio</span></h3><div id="pfSegs"></div></div>
+      <div class="card"><h3>Toda la base por segmento <span class="sub">clic para ver integrantes</span></h3><div class="bars" id="segBars"></div><div id="segMembers" class="chips" style="margin-top:10px"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 WOOWUP -->
+<section class="panel" data-p="woowup">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 5 · Activación CRM</div><h2>Cómo se refleja en WoowUp</h2>
+    <p>El socio se crea o actualiza como cliente (clave: DNI), cada viaje y cada préstamo entra como compra en su propia sucursal para no mezclar unidades de negocio, y los segmentos llegan como etiquetas y atributos listos para campañas.</p></div>
+  </div>
+  <div class="grid g2">
+    <div class="app">
+      <div class="app-bar w">Ficha de cliente · WoowUp <span class="sim">Vista simulada</span></div>
+      <div class="app-body grid" id="wuProfile" style="gap:14px"></div>
+    </div>
+    <div class="card">
+      <div class="subtabs" id="wuTabs">
+        <button class="subtab on" data-t="user">Cliente</button>
+        <button class="subtab" data-t="tur">Compras turismo</button>
+        <button class="subtab" data-t="pre">Compras préstamos</button>
+      </div>
+      <div class="code-head"><div class="method" id="wuMethod"></div><span class="muted" style="font-size:12px" id="wuCount"></span></div>
+      <pre class="code" id="wuPayload"></pre>
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px">
+    <h3>Campañas automatizadas que se habilitan <span class="sub">audiencias calculadas sobre la base real</span></h3>
+    <div class="grid g3" id="wuCamps"></div>
+  </div>
+</section>
+
+<!-- 6 WISE -->
+<section class="panel" data-p="wise">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 6 · Atención</div><h2>Cómo se refleja en Wise CX</h2>
+    <p>Cuando el socio escribe por WhatsApp, Wise CX lo reconoce por su teléfono normalizado, muestra el contexto de turismo y préstamos al agente y deriva la conversación a la cola correcta. Elija un mensaje para ver la decisión de ruteo.</p></div>
+  </div>
+  <div class="grid g-side">
+    <div class="app">
+      <div class="app-bar x">Bandeja de agente · Wise CX <span class="sim">Vista simulada</span></div>
+      <div class="inbox">
+        <div class="chat">
+          <div class="chat-head" id="wxHead"></div>
+          <div class="chat-body" id="wxBody"></div>
+          <div class="chat-input">
+            <label for="wxMsg" class="muted" style="font-size:12px;width:100%">Mensaje entrante del socio</label>
+            <select id="wxMsg">
+              <option value="Hola, quería consultar por los paquetes a Brasil para el verano">Hola, quería consultar por los paquetes a Brasil para el verano</option>
+              <option value="Buenas, ¿cuántas cuotas me quedan del préstamo?">Buenas, ¿cuántas cuotas me quedan del préstamo?</option>
+              <option value="Hola, necesito hablar con alguien">Hola, necesito hablar con alguien</option>
+              <option value="¿Puedo pedir un préstamo para pagar un viaje?">¿Puedo pedir un préstamo para pagar un viaje?</option>
+            </select>
+            <button class="btn small" id="wxSend" style="background:var(--wise)">Recibir</button>
+          </div>
+        </div>
+        <div class="side" id="wxSide"></div>
+      </div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>Decisión de ruteo</h3><div id="wxTrace"></div></div>
+      <div class="card"><div class="code-head"><div class="method" id="wxMethod"></div></div><pre class="code" id="wxPayload"></pre></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- 7 MONITOREO -->
+<section class="panel" data-p="monitoreo">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 7 · Monitoreo</div><h2>Reportes de sincronización por módulo</h2>
+    <p>Lo que vería el equipo de AMR cada día: cuántos registros de Socios, Préstamos y Turismo viajaron, si llegaron bien a WoowUp y a Wise CX, qué errores quedaron abiertos y si los totales coinciden con el origen. La operación del día es simulada sobre registros reales del set; los cambios que simule en la etapa 2 aparecen acá.</p></div>
+    <div class="muted" style="font-size:12.5px" id="monDate"></div>
+  </div>
+  <div class="subtabs" id="monTabs"></div>
+  <div class="modcards" id="monCards"></div>
+  <div class="grid g-side">
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>Recorrido del día <span class="sub" id="monFunSub"></span></h3><div class="funnel" id="monFunnel"></div></div>
+      <div class="card"><h3>Registros procesados por hora</h3><div class="chart" id="monChart"></div></div>
+      <div class="card"><h3>Errores y advertencias <span class="sub" id="monErrSub"></span></h3><div class="tbl-wrap" style="max-height:320px"><table id="monErr"></table></div></div>
+      <div class="card"><h3>Registros que viajaron hoy <span class="sub">clic en una fila para seguir a ese socio</span></h3><div class="tbl-wrap" style="max-height:360px"><table id="monEv"></table></div></div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card"><h3>¿Los datos viajan bien?</h3><div id="monChecks"></div></div>
+      <div class="card"><h3>Conciliación de la base <span class="sub">origen contra destinos</span></h3><div class="tbl-wrap"><table id="monRec"></table></div></div>
+      <div class="card"><h3>Corridas de hoy <span class="sub">cada 15 minutos</span></h3><div class="tbl-wrap" style="max-height:360px"><table id="monRuns"></table></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 8 IMPLEMENTACION -->
+<section class="panel" data-p="implementacion">
+  <div class="intro">
+    <div><div class="eyebrow">Etapa 8 · Implementación</div><h2>Cómo lo ponemos en marcha</h2>
+    <p>Lo que necesitamos de AMR y el plan por fases. Los plazos son estimados y se confirman al terminar el relevamiento técnico.</p></div>
+  </div>
+  <div class="grid g-side">
+    <div class="card"><h3>Plan de implementación <span class="sub">8 semanas estimadas</span></h3><div class="gantt" id="gantt"></div></div>
+    <div class="card"><h3>Qué necesitamos de AMR</h3><div id="needs"></div></div>
+  </div>
+  <div class="cta" style="margin-top:16px">
+    <div><h3>Próximo paso</h3><p>Reunión de relevamiento técnico de 90 minutos con el equipo de sistemas de AMR y los referentes de Turismo y Préstamos, para validar el acceso a los datos, las reglas de segmentación y las colas de atención.</p></div>
+    <span class="mono" style="font-size:13px">franco@patagoniadigital.tech</span>
+  </div>
+</section>
+</div></main>
+<footer><div class="wrap"><span>Patagonia Digital · patagoniadigital.tech</span><span>Datos de prueba, no reales. Fecha de referencia del cálculo: 25/10/2026. Endpoints y nombres de campos son ilustrativos hasta validar con cada plataforma.</span></div></footer>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const RAW = {"S":[["23317379","Fernández","Natalia","Abogado/a","341 15358-1447","natalia.fernandez@prueba.com",1993,"Ambos"],["25959765","Marchetti","Gabriel","Arquitecto/a","341 15389-5283","gabriel.marchetti@prueba.com",1996,"Solo Préstamos"],["6061804","Torres","Silvina","Médico/a","341 15642-5916","silvina.torres@prueba.com",2003,"Ambos"],["19021132","Fernández","Agustina","Enfermero/a","341 15637-2274","agustina.fernandez@prueba.com",2022,"Solo Préstamos"],["37153851","Correa","Mariana","Odontólogo/a","341 15392-1111","mariana.correa@prueba.com",2014,"Ambos"],["24987722","Rojas","Paula","Kinesiólogo/a","341 15550-6186","paula.rojas@prueba.com",1999,"Sin compras"],["21890291","Castro","Gustavo","Enfermero/a","341 15699-6308","gustavo.castro@prueba.com",2005,"Solo Préstamos"],["20853547","Rodríguez","Carolina","Arquitecto/a","341 15316-6079","carolina.rodriguez@prueba.com",1992,"Solo Turismo"],["24475980","Sosa","Federico","Enfermero/a","341 15475-1778","federico.sosa@prueba.com",2015,"Sin compras"],["17637549","López","Gabriel","Odontólogo/a","341 15584-4754","gabriel.lopez@prueba.com",2000,"Solo Préstamos"],["10629846","Sosa","Romina","Abogado/a","341 15377-2748","romina.sosa@prueba.com",1997,"Solo Préstamos"],["12469924","Sosa","Nicolás","Contador/a","341 15451-2670","nicolas.sosa@prueba.com",1990,"Solo Turismo"],["17807418","Rossi","Martín","Odontólogo/a","341 15435-5135","martin.rossi@prueba.com",2011,"Ambos"],["10749954","Ortiz","Marcelo","Enfermero/a","341 15527-8055","marcelo.ortiz@prueba.com",2016,"Sin compras"],["14510186","Núñez","Esteban","Arquitecto/a","341 15285-6926","esteban.nunez@prueba.com",2021,"Ambos"],["13544425","Luna","Valeria","Contador/a","341 15356-5506","valeria.luna@prueba.com",2002,"Ambos"],["26160037","Sánchez","Silvina","Enfermero/a","341 15458-8967","silvina.sanchez@prueba.com",2007,"Solo Turismo"],["20045350","Vega","Marcelo","Psicólogo/a","341 15642-5864","marcelo.vega@prueba.com",1988,"Ambos"],["8506175","González","Lucía","Arquitecto/a","341 15618-6489","lucia.gonzalez@prueba.com",2004,"Solo Préstamos"],["20579889","Díaz","Diego","Kinesiólogo/a","341 15143-5746","diego.diaz@prueba.com",1990,"Ambos"],["38376272","Marchetti","Sofía","Odontólogo/a","341 15340-7803","sofia.marchetti@prueba.com",1991,"Ambos"],["12494468","Álvarez","Federico","Psicólogo/a","341 15481-7879","federico.alvarez@prueba.com",2001,"Sin compras"],["6070421","Álvarez","Diego","Contador/a","341 15540-1946","diego.alvarez@prueba.com",2020,"Solo Turismo"],["33098377","Núñez","Belén","Médico/a","341 15568-9382","belen.nunez@prueba.com",2004,"Solo Turismo"],["2834438","González","Andrés","Contador/a","341 15604-1052","andres.gonzalez@prueba.com",1999,"Ambos"],["12314974","Lombardi","Ricardo","Médico/a","341 15373-5335","ricardo.lombardi@prueba.com",2021,"Solo Turismo"],["12858720","González","Martín","Abogado/a","341 15186-2245","martin.gonzalez@prueba.com",2015,"Solo Turismo"],["29001764","Díaz","Agustina","Kinesiólogo/a","341 15221-5824","agustina.diaz@prueba.com",2000,"Solo Turismo"],["21900507","Vega","Natalia","Psicólogo/a","341 15392-9255","natalia.vega@prueba.com",2003,"Solo Préstamos"],["LE-6067995","Sosa","Leandro","Enfermero/a","341 15118-2174","leandro.sosa@prueba.com",2005,"Solo Turismo"],["12738262","Silva","Ignacio","Psicólogo/a","341 15264-5752","ignacio.silva@prueba.com",2022,"Solo Préstamos"],["13509363","Aguirre","Paula","Médico/a","341 15447-5551","paula.aguirre@prueba.com",2008,"Solo Préstamos"],["17130225","Gómez","Hernán","Enfermero/a","341 15120-6581","hernan.gomez@prueba.com",1996,"Ambos"],["13169172","López","Andrés","Abogado/a","341 15471-1443","andres.lopez@prueba.com",1996,"Ambos"],["20324875","Díaz","Victoria","Arquitecto/a","341 15240-9753","victoria.diaz@prueba.com",1990,"Solo Préstamos"],["17337299","Rossi","Leandro","Contador/a","341 15125-1086","leandro.rossi@prueba.com",2023,"Ambos"],["12076373","Luna","Lucía","Contador/a","341 15534-4032","lucia.luna@prueba.com",2018,"Ambos"],["93738901","Benítez","Lucía","Kinesiólogo/a","341 15390-8416","lucia.benitez@prueba.com",1998,"Ambos"],["6373689","Ortiz","Diego","Odontólogo/a","341 15247-3797","diego.ortiz@prueba.com",2009,"Ambos"],["11549542","Correa","María","Arquitecto/a","341 15143-1646","maria.correa@prueba.com",1989,"Solo Préstamos"],["20408607","Álvarez","Juan","Abogado/a","341 15349-6189","juan.alvarez@prueba.com",2016,"Solo Turismo"],["11183358","Gómez","Verónica","Kinesiólogo/a","341 15519-4779","veronica.gomez@prueba.com",2014,"Solo Préstamos"],["16931806","Correa","Claudia","Enfermero/a","341 15191-5027","claudia.correa@prueba.com",1995,"Solo Préstamos"],["23052171","Flores","Daniela","Odontólogo/a","341 15622-1728","daniela.flores@prueba.com",2021,"Solo Turismo"],["14930067","Fernández","Silvina","Abogado/a","341 15584-5262","silvina.fernandez@prueba.com",2016,"Solo Préstamos"],["22161497","Gómez","Martín","Psicólogo/a","341 15284-7906","martin.gomez@prueba.com",2011,"Ambos"],["12522756","Fernández","Fernando","Abogado/a","341 15404-6518","fernando.fernandez@prueba.com",2022,"Sin compras"],["21417249","Ríos","Silvina","Médico/a","341 15122-5699","silvina.rios@prueba.com",2005,"Sin compras"],["23242324","Pérez","Juan","Kinesiólogo/a","341 15178-5745","juan.perez@prueba.com",2013,"Solo Préstamos"],["10418991","Álvarez","Ignacio","Arquitecto/a","341 15627-7647","ignacio.alvarez@prueba.com",2002,"Solo Turismo"],["33686067","Molina","Paula","Kinesiólogo/a","341 15229-3283","paula.molina@prueba.com",2000,"Solo Turismo"],["21416715","Lombardi","Natalia","Psicólogo/a","341 15645-2640","natalia.lombardi@prueba.com",1995,"Solo Préstamos"],["13167240","Aguirre","Romina","Arquitecto/a","341 15610-7191","romina.aguirre@prueba.com",2003,"Ambos"],["12736963","Molina","Romina","Enfermero/a","341 15624-1629","romina.molina@prueba.com",2013,"Sin compras"],["17387557","Fernández","Carolina","Médico/a","341 15222-1657","carolina.fernandez@prueba.com",2013,"Sin compras"],["10188185","Gómez","Gabriel","Abogado/a","341 15570-6987","gabriel.gomez@prueba.com",2019,"Solo Préstamos"],["36742736","Núñez","Federico","Psicólogo/a","341 15510-9516","federico.nunez@prueba.com",2020,"Ambos"],["26572335","Rojas","Belén","Psicólogo/a","341 15681-7065","belen.rojas@prueba.com",1990,"Ambos"],["34408425","Ramírez","Fernando","Kinesiólogo/a","341 15139-7992","fernando.ramirez@prueba.com",1995,"Solo Turismo"],["32957983","Acosta","Agustina","Kinesiólogo/a","341 15512-1290","agustina.acosta@prueba.com",2015,"Sin compras"],["14975593","Fernández","Diego","Contador/a","341 15378-4421","diego.fernandez@prueba.com",2012,"Solo Préstamos"],["5240112","Luna","Fernando","Odontólogo/a","341 15384-7527","fernando.luna@prueba.com",2003,"Ambos"],["23239176","Rossi","Esteban","Médico/a","341 15408-4098","esteban.rossi@prueba.com",2008,"Solo Préstamos"],["12955243","Aguirre","Alejandro","Contador/a","341 15261-3566","alejandro.aguirre@prueba.com",2015,"Ambos"],["11871578","Ruiz","Nicolás","Enfermero/a","341 15669-8525","nicolas.ruiz@prueba.com",2018,"Solo Turismo"],["10987604","Lombardi","Laura","Arquitecto/a","341 15366-4919","laura.lombardi@prueba.com",2019,"Solo Turismo"],["29311258","Herrera","Sebastián","Arquitecto/a","341 15407-2322","sebastian.herrera@prueba.com",2017,"Ambos"],["4707077","Bianchi","Alejandro","Psicólogo/a","341 15154-3739","alejandro.bianchi@prueba.com",2012,"Solo Préstamos"],["14444862","Vega","Laura","Psicólogo/a","341 15504-7470","laura.vega@prueba.com",2007,"Solo Turismo"],["35235393","Paz","Fernando","Médico/a","341 15624-1610","fernando.paz@prueba.com",1996,"Solo Turismo"],["18867847","Gómez","Mariana","Abogado/a","341 15398-7536","mariana.gomez@prueba.com",2017,"Solo Turismo"],["22329569","Bianchi","Esteban","Abogado/a","341 15136-1826","esteban.bianchi@prueba.com",1989,"Ambos"],["20745132","Rodríguez","Sebastián","Psicólogo/a","341 15616-2556","sebastian.rodriguez@prueba.com",1990,"Solo Préstamos"],["5080597","López","Matías","Psicólogo/a","341 15336-6760","matias.lopez@prueba.com",2024,"Solo Turismo"],["3238632","Molina","Victoria","Arquitecto/a","341 15437-7968","victoria.molina@prueba.com",2014,"Solo Préstamos"],["21415453","Molina","Fernando","Médico/a","341 15141-8607","fernando.molina@prueba.com",2013,"Solo Préstamos"],["18031987","Aguirre","Federico","Enfermero/a","341 15215-7173","federico.aguirre@prueba.com",2007,"Ambos"],["26730083","Rossi","Fernando","Psicólogo/a","341 15658-7677","fernando.rossi@prueba.com",2011,"Sin compras"],["8278318","Núñez","Gustavo","Psicólogo/a","341 15355-7234","gustavo.nunez@prueba.com",2022,"Ambos"],["10409940","Rossi","Federico","Arquitecto/a","341 15109-2457","federico.rossi@prueba.com",2020,"Solo Préstamos"],["17807433","Ruiz","Diego","Contador/a","341 15161-1329","diego.ruiz@prueba.com",2013,"Ambos"],["14426773","Pereyra","María","Abogado/a","341 15345-1180","maria.pereyra@prueba.com",2002,"Sin compras"],["18593978","Pereyra","Julieta","Odontólogo/a","341 15512-3519","julieta.pereyra@prueba.com",2014,"Solo Turismo"],["17148752","Rojas","Ignacio","Médico/a","341 15312-4092","ignacio.rojas@prueba.com",2007,"Ambos"],["23760570","González","Florencia","Psicólogo/a","341 15623-8069","florencia.gonzalez@prueba.com",1988,"Ambos"],["17828071","Molina","Matías","Abogado/a","341 15661-2119","matias.molina@prueba.com",2023,"Sin compras"],["12324403","Aguirre","Rodrigo","Psicólogo/a","341 15556-8533","rodrigo.aguirre@prueba.com",2010,"Ambos"],["16382672","Silva","Verónica","Enfermero/a","341 15356-9971","veronica.silva@prueba.com",1999,"Ambos"],["93555227","Martínez","Andrés","Médico/a","341 15392-2124","andres.martinez@prueba.com",2004,"Solo Turismo"],["35019674","Herrera","Matías","Arquitecto/a","341 15609-3177","matias.herrera@prueba.com",1993,"Sin compras"],["17929018","Vega","Rodrigo","Médico/a","341 15200-8074","rodrigo.vega@prueba.com",1993,"Solo Turismo"],["26871294","Martínez","Juan","Médico/a","341 15216-4400","juan.martinez@prueba.com",1997,"Solo Préstamos"],["14510545","Gómez","Agustina","Kinesiólogo/a","341 15261-4223","agustina.gomez@prueba.com",2011,"Sin compras"],["33213420","Marchetti","Florencia","Arquitecto/a","341 15551-9864","florencia.marchetti@prueba.com",2014,"Solo Turismo"],["30155463","Díaz","Fernando","Arquitecto/a","341 15350-9540","fernando.diaz@prueba.com",1999,"Ambos"],["7685323","Herrera","Paula","Odontólogo/a","341 15380-7291","paula.herrera@prueba.com",1989,"Ambos"],["25403853","Aguirre","Cecilia","Médico/a","341 15215-3033","cecilia.aguirre@prueba.com",2017,"Sin compras"],["28575224","Giménez","Agustina","Psicólogo/a","341 15412-8756","agustina.gimenez@prueba.com",1993,"Solo Turismo"],["5608784","Bianchi","Silvina","Arquitecto/a","341 15471-7389","silvina.bianchi@prueba.com",2003,"Ambos"],["21008315","Bianchi","Valeria","Abogado/a","341 15486-7595","valeria.bianchi@prueba.com",1998,"Ambos"]],"P":[["P-0001","23317379","20/03/2019",2019,"Préstamo Vacaciones",320000,36,"Cancelado"],["P-0002","23317379","27/01/2023",2023,"Préstamo Vacaciones",600000,24,"Cancelado"],["P-0003","23317379","07/04/2025",2025,"Préstamo Vacaciones",2000000,36,"Vigente"],["P-0004","23317379","25/09/2026",2026,"Hot Sale 2026",800000,6,"Vigente"],["P-0005","25959765","16/02/2024",2024,"303 Oportunidad",1200000,18,"Vigente"],["P-0006","6061804","24/03/2019",2019,"Préstamo Vacaciones",320000,18,"Cancelado"],["P-0007","6061804","02/06/2022",2022,"34 Aniversario",1200000,36,"Cancelado"],["P-0008","19021132","11/07/2019",2019,"31 Aniversario",600000,6,"Cancelado"],["P-0009","37153851","14/04/2026",2026,"Hot Sale 2026",3000000,36,"Vigente"],["P-0010","21890291","16/03/2019",2019,"31 Aniversario",120000,36,"Cancelado"],["P-0011","17637549","27/10/2019",2019,"Préstamo Vacaciones",320000,12,"Cancelado"],["P-0012","17637549","26/12/2022",2022,"34 Aniversario",1200000,6,"Cancelado"],["P-0013","17637549","17/07/2023",2023,"35 Aniversario",200000,36,"Cancelado"],["P-0014","17637549","28/05/2024",2024,"303 Oportunidad",500000,6,"Cancelado"],["P-0015","10629846","21/12/2022",2022,"Hot Sale 2022",1200000,18,"Cancelado"],["P-0016","10629846","10/06/2024",2024,"303 Oportunidad",3000000,36,"Cancelado"],["P-0017","17807418","09/08/2019",2019,"Préstamo Vacaciones",600000,24,"Cancelado"],["P-0018","17807418","10/06/2021",2021,"Línea Equipamiento Profesional",320000,6,"Cancelado"],["P-0019","17807418","14/10/2023",2023,"Préstamo Vacaciones",800000,18,"Cancelado"],["P-0020","17807418","21/03/2024",2024,"Hot Sale 2024",3000000,24,"Cancelado"],["P-0021","14510186","16/01/2021",2021,"33 Aniversario",120000,36,"Cancelado"],["P-0022","14510186","20/12/2022",2022,"34 Aniversario",1200000,18,"Cancelado"],["P-0023","14510186","23/03/2023",2023,"303 Oportunidad",1200000,6,"Cancelado"],["P-0024","14510186","06/10/2026",2026,"Hot Sale 2026",800000,6,"Vigente"],["P-0025","13544425","04/04/2022",2022,"34 Aniversario",600000,24,"Cancelado"],["P-0026","13544425","10/05/2025",2025,"CyberMonday 2025",1500000,18,"Cancelado"],["P-0027","13544425","06/10/2026",2026,"CuotiCash",500000,6,"Cancelado"],["P-0028","20045350","18/11/2025",2025,"37 Aniversario",300000,36,"Vigente"],["P-0029","8506175","26/02/2024",2024,"Hot Sale 2024",500000,18,"Vigente"],["P-0030","20579889","28/01/2023",2023,"303 Oportunidad",1200000,12,"Cancelado"],["P-0031","20579889","03/02/2025",2025,"Préstamo Vacaciones",300000,12,"Cancelado"],["P-0032","38376272","13/10/2019",2019,"31 Aniversario",1200000,12,"Cancelado"],["P-0033","38376272","16/11/2021",2021,"Línea Equipamiento Profesional",200000,24,"Cancelado"],["P-0034","38376272","25/07/2023",2023,"303 Oportunidad",600000,24,"Cancelado"],["P-0035","38376272","04/06/2025",2025,"Préstamo Vacaciones",300000,12,"Vigente"],["P-0036","2834438","20/04/2022",2022,"34 Aniversario",600000,12,"Cancelado"],["P-0037","2834438","05/01/2026",2026,"38 Aniversario",3000000,36,"Vigente"],["P-0038","21900507","11/11/2019",2019,"31 Aniversario",480000,6,"Cancelado"],["P-0039","21900507","05/08/2021",2021,"33 Aniversario",200000,6,"Cancelado"],["P-0040","21900507","15/01/2023",2023,"35 Aniversario",120000,12,"Cancelado"],["P-0041","21900507","12/09/2026",2026,"Hot Sale 2026",2000000,36,"Vigente"],["P-0042","12738262","18/03/2021",2021,"Línea Equipamiento Profesional",480000,12,"Cancelado"],["P-0043","12738262","17/09/2024",2024,"Hot Sale 2024",800000,18,"Cancelado"],["P-0044","12738262","13/12/2025",2025,"37 Aniversario",300000,18,"Vigente"],["P-0045","13509363","17/04/2019",2019,"31 Aniversario",200000,18,"Cancelado"],["P-0046","17130225","22/02/2023",2023,"35 Aniversario",480000,18,"Cancelado"],["P-0047","13169172","03/06/2019",2019,"31 Aniversario",800000,18,"Cancelado"],["P-0048","13169172","26/11/2021",2021,"33 Aniversario",800000,24,"Cancelado"],["P-0049","20324875","21/03/2024",2024,"303 Oportunidad",800000,24,"Cancelado"],["P-0050","20324875","10/02/2025",2025,"Préstamo Vacaciones",1500000,36,"Vigente"],["P-0051","20324875","28/07/2026",2026,"CuotiCash",500000,36,"Vigente"],["P-0052","17337299","11/06/2019",2019,"Préstamo Vacaciones",320000,12,"Cancelado"],["P-0053","17337299","21/10/2020",2020,"Préstamo Emergencia",320000,18,"Cancelado"],["P-0054","17337299","23/10/2024",2024,"36 Aniversario",1200000,24,"Cancelado"],["P-0055","12076373","28/10/2020",2020,"Línea Equipamiento Profesional",480000,24,"Cancelado"],["P-0056","12076373","23/01/2022",2022,"34 Aniversario",800000,24,"Cancelado"],["P-0057","12076373","04/01/2025",2025,"Préstamo Vacaciones",3000000,24,"Cancelado"],["P-0058","12076373","26/04/2026",2026,"Hot Sale 2026",3000000,6,"Cancelado"],["P-0059","93738901","17/04/2021",2021,"Línea Equipamiento Profesional",1200000,6,"Cancelado"],["P-0060","93738901","11/08/2022",2022,"34 Aniversario",480000,24,"Cancelado"],["P-0061","93738901","18/10/2023",2023,"Préstamo Vacaciones",480000,12,"Cancelado"],["P-0062","93738901","07/04/2026",2026,"CuotiCash",2000000,36,"Vigente"],["P-0063","6373689","19/09/2021",2021,"33 Aniversario",600000,36,"Cancelado"],["P-0064","6373689","12/10/2022",2022,"Hot Sale 2022",1200000,12,"Cancelado"],["P-0065","6373689","26/05/2025",2025,"CyberMonday 2025",300000,24,"Vigente"],["P-0066","11549542","01/06/2022",2022,"34 Aniversario",600000,36,"Cancelado"],["P-0067","11549542","18/12/2023",2023,"Préstamo Vacaciones",600000,18,"Cancelado"],["P-0068","11183358","16/02/2026",2026,"CuotiCash",2000000,6,"Vigente"],["P-0069","16931806","17/09/2021",2021,"33 Aniversario",320000,36,"Cancelado"],["P-0070","14930067","20/09/2020",2020,"Línea Equipamiento Profesional",200000,24,"Cancelado"],["P-0071","14930067","05/06/2023",2023,"35 Aniversario",800000,18,"Cancelado"],["P-0072","14930067","05/11/2025",2025,"CyberMonday 2025",3000000,12,"Cancelado"],["P-0073","14930067","06/08/2026",2026,"CuotiCash",500000,36,"Vigente"],["P-0074","22161497","04/06/2020",2020,"Préstamo Emergencia",600000,12,"Cancelado"],["P-0075","22161497","03/04/2021",2021,"Línea Equipamiento Profesional",480000,36,"Cancelado"],["P-0076","23242324","26/07/2024",2024,"36 Aniversario",1200000,12,"Vigente"],["P-0077","23242324","01/06/2025",2025,"CyberMonday 2025",3000000,36,"Vigente"],["P-0078","21416715","26/06/2023",2023,"Préstamo Vacaciones",1200000,18,"Cancelado"],["P-0079","13167240","21/02/2019",2019,"Préstamo Vacaciones",1200000,24,"Cancelado"],["P-0080","10188185","25/02/2022",2022,"34 Aniversario",600000,18,"Cancelado"],["P-0081","36742736","17/07/2024",2024,"36 Aniversario",3000000,36,"Cancelado"],["P-0082","36742736","02/01/2026",2026,"38 Aniversario",3000000,6,"Cancelado"],["P-0083","26572335","19/04/2024",2024,"36 Aniversario",800000,12,"Vigente"],["P-0084","26572335","13/03/2025",2025,"CyberMonday 2025",3000000,18,"Vigente"],["P-0085","14975593","02/01/2019",2019,"31 Aniversario",200000,18,"Cancelado"],["P-0086","14975593","21/10/2020",2020,"Préstamo Emergencia",200000,24,"Cancelado"],["P-0087","14975593","12/03/2024",2024,"36 Aniversario",500000,24,"Vigente"],["P-0088","14975593","22/10/2026",2026,"CuotiCash",800000,36,"Vigente"],["P-0089","5240112","26/06/2024",2024,"36 Aniversario",1200000,6,"Vigente"],["P-0090","5240112","15/06/2026",2026,"Hot Sale 2026",500000,36,"Vigente"],["P-0091","23239176","01/08/2020",2020,"Préstamo Emergencia",600000,18,"Cancelado"],["P-0092","23239176","04/01/2023",2023,"303 Oportunidad",800000,12,"Cancelado"],["P-0093","23239176","12/10/2025",2025,"Préstamo Vacaciones",300000,18,"Cancelado"],["P-0094","12955243","09/07/2024",2024,"Hot Sale 2024",500000,36,"Vigente"],["P-0095","12955243","14/06/2025",2025,"37 Aniversario",1200000,24,"Vigente"],["P-0096","29311258","09/10/2019",2019,"Préstamo Vacaciones",800000,12,"Cancelado"],["P-0097","29311258","04/03/2020",2020,"Línea Equipamiento Profesional",200000,6,"Cancelado"],["P-0098","29311258","12/07/2022",2022,"Hot Sale 2022",1200000,36,"Cancelado"],["P-0099","29311258","25/04/2023",2023,"Préstamo Vacaciones",320000,6,"Cancelado"],["P-0100","4707077","22/07/2019",2019,"31 Aniversario",1200000,12,"Cancelado"],["P-0101","22329569","04/02/2020",2020,"Préstamo Emergencia",600000,36,"Cancelado"],["P-0102","20745132","27/11/2024",2024,"36 Aniversario",800000,24,"Cancelado"],["P-0103","20745132","08/01/2025",2025,"CyberMonday 2025",3000000,36,"Vigente"],["P-0104","3238632","03/08/2022",2022,"Hot Sale 2022",200000,6,"Cancelado"],["P-0105","21415453","03/09/2020",2020,"Línea Equipamiento Profesional",1200000,24,"Cancelado"],["P-0106","21415453","26/05/2021",2021,"Línea Equipamiento Profesional",480000,6,"Cancelado"],["P-0107","21415453","07/09/2024",2024,"303 Oportunidad",1500000,12,"Vigente"],["P-0108","18031987","13/09/2019",2019,"31 Aniversario",320000,36,"Cancelado"],["P-0109","18031987","21/05/2026",2026,"Hot Sale 2026",500000,36,"Cancelado"],["P-0110","8278318","23/10/2020",2020,"Préstamo Emergencia",800000,6,"Cancelado"],["P-0111","10409940","22/01/2019",2019,"31 Aniversario",1200000,6,"Cancelado"],["P-0112","10409940","04/05/2022",2022,"Hot Sale 2022",320000,6,"Cancelado"],["P-0113","10409940","05/07/2026",2026,"CuotiCash",500000,6,"Vigente"],["P-0114","17807433","08/05/2023",2023,"303 Oportunidad",320000,36,"Cancelado"],["P-0115","17807433","24/08/2024",2024,"36 Aniversario",800000,36,"Cancelado"],["P-0116","17148752","20/06/2020",2020,"Línea Equipamiento Profesional",1200000,12,"Cancelado"],["P-0117","17148752","04/07/2022",2022,"34 Aniversario",480000,18,"Cancelado"],["P-0118","17148752","04/05/2023",2023,"303 Oportunidad",800000,18,"Cancelado"],["P-0119","23760570","22/01/2019",2019,"Préstamo Vacaciones",320000,6,"Cancelado"],["P-0120","23760570","17/08/2021",2021,"33 Aniversario",600000,18,"Cancelado"],["P-0121","23760570","02/12/2022",2022,"34 Aniversario",1200000,36,"Cancelado"],["P-0122","23760570","02/03/2025",2025,"CyberMonday 2025",3000000,24,"Cancelado"],["P-0123","12324403","15/11/2019",2019,"31 Aniversario",480000,12,"Cancelado"],["P-0124","12324403","03/06/2026",2026,"Hot Sale 2026",2000000,6,"Vigente"],["P-0125","16382672","25/02/2025",2025,"CyberMonday 2025",3000000,36,"Cancelado"],["P-0126","26871294","03/10/2019",2019,"Préstamo Vacaciones",800000,18,"Cancelado"],["P-0127","26871294","24/08/2020",2020,"Línea Equipamiento Profesional",480000,12,"Cancelado"],["P-0128","26871294","11/01/2024",2024,"36 Aniversario",500000,24,"Vigente"],["P-0129","26871294","07/03/2025",2025,"37 Aniversario",1200000,18,"Cancelado"],["P-0130","30155463","01/08/2021",2021,"33 Aniversario",800000,12,"Cancelado"],["P-0131","7685323","26/09/2020",2020,"Línea Equipamiento Profesional",1200000,36,"Cancelado"],["P-0132","7685323","13/09/2024",2024,"36 Aniversario",1200000,18,"Vigente"],["P-0133","7685323","21/11/2025",2025,"Préstamo Vacaciones",3000000,24,"Cancelado"],["P-0134","7685323","22/01/2026",2026,"CuotiCash",1500000,24,"Cancelado"],["P-0135","5608784","26/04/2025",2025,"37 Aniversario",1500000,18,"Cancelado"],["P-0136","5608784","04/05/2026",2026,"38 Aniversario",300000,18,"Cancelado"],["P-0137","21008315","11/09/2020",2020,"Línea Equipamiento Profesional",1200000,6,"Cancelado"],["P-0138","21008315","26/05/2026",2026,"Hot Sale 2026",500000,18,"Vigente"]],"T":[["T-0001","23317379","12/08/2023",2023,"Internacional","Cancún","México","Paquete (aéreo + hotel)",5,3,3129000],["T-0002","23317379","21/07/2026",2026,"Internacional","Cusco y Machu Picchu","Perú","Paquete (aéreo + hotel + traslados)",10,1,1869000],["T-0003","6061804","15/07/2018",2018,"Nacional","Mar del Plata","Buenos Aires","Terrestre (bus + hotel)",7,2,184000],["T-0004","6061804","23/06/2019",2019,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Terrestre (bus + hotel)",5,4,214000],["T-0005","6061804","28/03/2020",2020,"Internacional","Madrid y Barcelona","España","Solo hotelería",7,1,207000],["T-0006","6061804","17/04/2021",2021,"Internacional","Punta del Este","Uruguay","Terrestre (bus + hotel)",4,1,198000],["T-0007","6061804","15/04/2022",2022,"Internacional","Cancún","México","Solo hotelería",10,2,990000],["T-0008","6061804","25/12/2022",2022,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel)",7,2,664000],["T-0009","6061804","27/07/2023",2023,"Nacional","Ushuaia","Tierra del Fuego","Solo hotelería",5,3,448000],["T-0010","6061804","24/07/2023",2023,"Internacional","Punta Cana","Rep. Dominicana","Solo hotelería",7,3,1432000],["T-0011","6061804","03/08/2024",2024,"Nacional","Mendoza","Mendoza","Solo hotelería",7,1,137000],["T-0012","6061804","15/01/2024",2024,"Nacional","Puerto Madryn","Chubut","Solo hotelería",5,2,780000],["T-0013","6061804","26/02/2025",2025,"Nacional","Mar del Plata","Buenos Aires","Paquete (aéreo + hotel)",10,2,1136000],["T-0014","6061804","03/05/2025",2025,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Paquete (aéreo + hotel + traslados)",5,2,1412000],["T-0015","6061804","15/04/2026",2026,"Internacional","Punta del Este","Uruguay","Terrestre (bus + hotel)",7,1,968000],["T-0016","6061804","17/04/2026",2026,"Nacional","El Calafate","Santa Cruz","Paquete (aéreo + hotel + traslados)",7,1,797000],["T-0017","37153851","16/06/2023",2023,"Internacional","Punta Cana","Rep. Dominicana","Paquete (aéreo + hotel)",10,2,1292000],["T-0018","20853547","01/06/2022",2022,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",7,2,699000],["T-0019","20853547","23/05/2023",2023,"Nacional","Mar del Plata","Buenos Aires","Solo hotelería",7,2,307000],["T-0020","12469924","24/09/2018",2018,"Internacional","Madrid y Barcelona","España","Paquete (aéreo + hotel + traslados)",14,1,298000],["T-0021","17807418","03/09/2017",2017,"Internacional","Río de Janeiro","Brasil","Paquete (aéreo + hotel + traslados)",7,1,476000],["T-0022","14510186","05/03/2015",2015,"Nacional","El Calafate","Santa Cruz","Solo hotelería",7,2,106000],["T-0023","14510186","13/01/2025",2025,"Nacional","Iguazú","Misiones","Terrestre (bus + hotel)",10,2,852000],["T-0024","13544425","16/03/2017",2017,"Internacional","Cancún","México","Paquete (aéreo + hotel + traslados)",3,2,538000],["T-0025","26160037","13/03/2017",2017,"Nacional","Bariloche","Río Negro","Paquete (aéreo + hotel + traslados)",4,2,280000],["T-0026","26160037","15/01/2024",2024,"Nacional","Ushuaia","Tierra del Fuego","Paquete (aéreo + hotel)",14,2,1404000],["T-0027","20045350","19/10/2024",2024,"Nacional","Mendoza","Mendoza","Paquete (aéreo + hotel)",14,3,1899000],["T-0028","20579889","09/11/2020",2020,"Nacional","Ushuaia","Tierra del Fuego","Terrestre (bus + hotel)",10,1,34000],["T-0029","38376272","04/05/2023",2023,"Nacional","Villa Carlos Paz","Córdoba","Terrestre (bus + hotel)",14,2,154000],["T-0030","38376272","08/11/2024",2024,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel + traslados)",10,1,266000],["T-0031","6070421","21/10/2016",2016,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",7,2,247000],["T-0032","6070421","10/06/2017",2017,"Internacional","Cusco y Machu Picchu","Perú","Paquete (aéreo + hotel + traslados)",7,1,293000],["T-0033","6070421","20/10/2019",2019,"Internacional","Punta Cana","Rep. Dominicana","Solo aéreo",7,3,735000],["T-0034","6070421","19/10/2022",2022,"Nacional","Villa Carlos Paz","Córdoba","Terrestre (bus + hotel)",10,3,458000],["T-0035","33098377","24/11/2018",2018,"Nacional","El Calafate","Santa Cruz","Paquete (aéreo + hotel)",7,4,427000],["T-0036","2834438","01/04/2023",2023,"Nacional","Puerto Madryn","Chubut","Paquete (aéreo + hotel)",4,2,237000],["T-0037","2834438","14/10/2025",2025,"Internacional","Cancún","México","Solo hotelería",4,2,1082000],["T-0038","2834438","17/04/2026",2026,"Internacional","Florianópolis","Brasil","Solo hotelería",3,1,615000],["T-0039","12314974","06/10/2015",2015,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel)",10,2,341000],["T-0040","12314974","21/09/2016",2016,"Nacional","Iguazú","Misiones","Solo aéreo",10,1,75000],["T-0041","12314974","16/10/2017",2017,"Nacional","El Calafate","Santa Cruz","Solo hotelería",7,3,182000],["T-0042","12314974","12/11/2018",2018,"Nacional","El Calafate","Santa Cruz","Terrestre (bus + hotel)",7,3,203000],["T-0043","12314974","07/06/2026",2026,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Solo hotelería",5,1,166000],["T-0044","12858720","20/03/2016",2016,"Nacional","Puerto Madryn","Chubut","Solo aéreo",7,2,70000],["T-0045","12858720","05/09/2017",2017,"Internacional","Madrid y Barcelona","España","Paquete (aéreo + hotel)",4,3,1177000],["T-0046","12858720","08/06/2018",2018,"Internacional","Punta del Este","Uruguay","Solo aéreo",14,3,535000],["T-0047","12858720","22/05/2022",2022,"Internacional","Punta Cana","Rep. Dominicana","Paquete (aéreo + hotel + traslados)",7,4,1841000],["T-0048","12858720","15/01/2023",2023,"Nacional","Iguazú","Misiones","Solo aéreo",10,3,386000],["T-0049","12858720","10/06/2024",2024,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Terrestre (bus + hotel)",10,1,209000],["T-0050","29001764","23/02/2023",2023,"Internacional","Santiago","Chile","Terrestre (bus + hotel)",10,3,781000],["T-0051","29001764","20/08/2025",2025,"Internacional","Florianópolis","Brasil","Solo hotelería",7,3,2232000],["T-0052","29001764","20/03/2026",2026,"Nacional","Ushuaia","Tierra del Fuego","Terrestre (bus + hotel)",4,2,958000],["T-0053","LE-6067995","19/03/2018",2018,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Terrestre (bus + hotel)",4,4,235000],["T-0054","17130225","24/01/2016",2016,"Internacional","Madrid y Barcelona","España","Solo aéreo",7,1,138000],["T-0055","17130225","13/12/2016",2016,"Nacional","El Calafate","Santa Cruz","Solo hotelería",7,2,74000],["T-0056","17130225","22/08/2017",2017,"Nacional","Puerto Madryn","Chubut","Paquete (aéreo + hotel + traslados)",7,4,580000],["T-0057","17130225","06/02/2017",2017,"Internacional","Punta del Este","Uruguay","Solo aéreo",7,2,252000],["T-0058","17130225","17/07/2023",2023,"Nacional","El Calafate","Santa Cruz","Paquete (aéreo + hotel + traslados)",10,2,400000],["T-0059","17130225","17/02/2026",2026,"Nacional","Mendoza","Mendoza","Paquete (aéreo + hotel + traslados)",7,2,1366000],["T-0060","13169172","28/08/2016",2016,"Internacional","Punta del Este","Uruguay","Solo aéreo",7,4,689000],["T-0061","13169172","16/04/2017",2017,"Nacional","Mar del Plata","Buenos Aires","Solo hotelería",5,2,125000],["T-0062","13169172","22/05/2018",2018,"Nacional","Iguazú","Misiones","Paquete (aéreo + hotel + traslados)",10,2,351000],["T-0063","13169172","23/07/2019",2019,"Nacional","Mar del Plata","Buenos Aires","Solo hotelería",7,2,132000],["T-0064","17337299","17/01/2017",2017,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel)",7,2,201000],["T-0065","17337299","27/04/2019",2019,"Nacional","Salta y Jujuy","Noroeste","Solo aéreo",7,3,163000],["T-0066","17337299","12/08/2021",2021,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel)",7,2,293000],["T-0067","17337299","26/03/2023",2023,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",3,4,747000],["T-0068","17337299","14/01/2025",2025,"Nacional","Mar del Plata","Buenos Aires","Paquete (aéreo + hotel + traslados)",3,2,814000],["T-0069","12076373","28/07/2024",2024,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",5,4,2808000],["T-0070","93738901","14/02/2015",2015,"Nacional","Mar del Plata","Buenos Aires","Terrestre (bus + hotel)",4,4,120000],["T-0071","93738901","13/06/2018",2018,"Nacional","Iguazú","Misiones","Terrestre (bus + hotel)",14,1,32000],["T-0072","93738901","05/10/2023",2023,"Nacional","El Calafate","Santa Cruz","Solo hotelería",7,2,168000],["T-0073","6373689","19/05/2026",2026,"Nacional","Puerto Madryn","Chubut","Solo aéreo",14,3,1018000],["T-0074","20408607","07/09/2024",2024,"Internacional","Cusco y Machu Picchu","Perú","Solo hotelería",7,4,4295000],["T-0075","23052171","07/03/2016",2016,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Terrestre (bus + hotel)",4,2,144000],["T-0076","23052171","16/01/2019",2019,"Internacional","Cusco y Machu Picchu","Perú","Solo hotelería",4,2,377000],["T-0077","22161497","15/09/2015",2015,"Nacional","Puerto Madryn","Chubut","Solo aéreo",5,2,130000],["T-0078","22161497","28/07/2017",2017,"Internacional","Miami","EE.UU.","Solo hotelería",5,2,268000],["T-0079","22161497","23/10/2019",2019,"Internacional","Río de Janeiro","Brasil","Solo aéreo",7,3,522000],["T-0080","22161497","11/02/2019",2019,"Internacional","Cusco y Machu Picchu","Perú","Paquete (aéreo + hotel)",5,2,702000],["T-0081","22161497","11/03/2020",2020,"Internacional","Roma y Florencia","Italia","Paquete (aéreo + hotel)",7,2,456000],["T-0082","22161497","02/11/2021",2021,"Nacional","El Calafate","Santa Cruz","Terrestre (bus + hotel)",7,2,82000],["T-0083","22161497","06/04/2021",2021,"Nacional","Mar del Plata","Buenos Aires","Terrestre (bus + hotel)",14,3,188000],["T-0084","22161497","07/03/2023",2023,"Nacional","Villa Carlos Paz","Córdoba","Terrestre (bus + hotel)",14,4,856000],["T-0085","22161497","12/01/2024",2024,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel)",3,2,1356000],["T-0086","22161497","20/10/2025",2025,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel)",7,2,768000],["T-0087","10418991","14/05/2015",2015,"Nacional","Bariloche","Río Negro","Solo aéreo",5,2,134000],["T-0088","10418991","16/08/2017",2017,"Nacional","Villa Carlos Paz","Córdoba","Solo hotelería",4,3,187000],["T-0089","10418991","02/12/2019",2019,"Nacional","Puerto Madryn","Chubut","Solo aéreo",7,4,276000],["T-0090","10418991","21/04/2023",2023,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel + traslados)",4,2,758000],["T-0091","10418991","03/10/2026",2026,"Nacional","Puerto Madryn","Chubut","Terrestre (bus + hotel)",7,2,670000],["T-0092","33686067","11/11/2024",2024,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Solo aéreo",7,4,736000],["T-0093","33686067","07/03/2026",2026,"Nacional","El Calafate","Santa Cruz","Paquete (aéreo + hotel + traslados)",7,3,1140000],["T-0094","13167240","11/05/2018",2018,"Nacional","El Calafate","Santa Cruz","Terrestre (bus + hotel)",4,2,87000],["T-0095","36742736","25/06/2025",2025,"Internacional","Río de Janeiro","Brasil","Solo aéreo",4,3,1862000],["T-0096","26572335","02/02/2018",2018,"Internacional","Roma y Florencia","Italia","Solo aéreo",5,2,379000],["T-0097","34408425","10/06/2017",2017,"Internacional","Río de Janeiro","Brasil","Solo hotelería",7,2,410000],["T-0098","34408425","10/12/2023",2023,"Nacional","Iguazú","Misiones","Solo hotelería",3,4,662000],["T-0099","5240112","17/01/2016",2016,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Paquete (aéreo + hotel)",5,4,386000],["T-0100","5240112","27/05/2017",2017,"Internacional","Santiago","Chile","Solo aéreo",5,3,500000],["T-0101","5240112","25/11/2022",2022,"Nacional","Salta y Jujuy","Noroeste","Solo aéreo",7,4,630000],["T-0102","5240112","23/11/2025",2025,"Internacional","Cusco y Machu Picchu","Perú","Solo hotelería",7,2,2097000],["T-0103","12955243","20/01/2016",2016,"Nacional","El Calafate","Santa Cruz","Terrestre (bus + hotel)",3,2,87000],["T-0104","12955243","20/11/2017",2017,"Nacional","Salta y Jujuy","Noroeste","Solo aéreo",5,2,86000],["T-0105","12955243","05/07/2019",2019,"Nacional","Ushuaia","Tierra del Fuego","Paquete (aéreo + hotel + traslados)",14,1,79000],["T-0106","11871578","20/04/2015",2015,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Terrestre (bus + hotel)",5,4,237000],["T-0107","11871578","14/11/2016",2016,"Internacional","Miami","EE.UU.","Paquete (aéreo + hotel)",7,1,348000],["T-0108","11871578","14/05/2019",2019,"Nacional","Puerto Madryn","Chubut","Solo hotelería",3,4,310000],["T-0109","11871578","27/09/2020",2020,"Nacional","Mar del Plata","Buenos Aires","Paquete (aéreo + hotel + traslados)",3,2,208000],["T-0110","11871578","08/11/2021",2021,"Nacional","Mendoza","Mendoza","Paquete (aéreo + hotel + traslados)",3,3,401000],["T-0111","10987604","11/12/2021",2021,"Nacional","Mar del Plata","Buenos Aires","Terrestre (bus + hotel)",10,2,202000],["T-0112","29311258","03/03/2022",2022,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel)",10,2,461000],["T-0113","29311258","10/01/2023",2023,"Nacional","Mar del Plata","Buenos Aires","Paquete (aéreo + hotel)",10,1,234000],["T-0114","29311258","07/10/2024",2024,"Internacional","Cancún","México","Paquete (aéreo + hotel)",3,3,3465000],["T-0115","29311258","03/12/2025",2025,"Nacional","Mendoza","Mendoza","Solo aéreo",4,2,483000],["T-0116","14444862","16/05/2022",2022,"Internacional","Miami","EE.UU.","Paquete (aéreo + hotel + traslados)",3,2,1378000],["T-0117","14444862","23/04/2023",2023,"Nacional","El Calafate","Santa Cruz","Solo hotelería",4,1,137000],["T-0118","14444862","24/07/2025",2025,"Internacional","Madrid y Barcelona","España","Solo hotelería",3,2,1728000],["T-0119","14444862","02/04/2026",2026,"Nacional","Ushuaia","Tierra del Fuego","Terrestre (bus + hotel)",7,2,784000],["T-0120","35235393","08/02/2018",2018,"Internacional","Punta Cana","Rep. Dominicana","Paquete (aéreo + hotel)",14,4,1847000],["T-0121","18867847","02/11/2015",2015,"Nacional","Mar del Plata","Buenos Aires","Paquete (aéreo + hotel + traslados)",14,1,102000],["T-0122","22329569","22/08/2016",2016,"Nacional","Salta y Jujuy","Noroeste","Solo hotelería",7,3,149000],["T-0123","22329569","21/03/2017",2017,"Internacional","Punta del Este","Uruguay","Solo aéreo",10,2,367000],["T-0124","5080597","24/01/2026",2026,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",3,1,846000],["T-0125","18031987","05/06/2017",2017,"Nacional","Mendoza","Mendoza","Solo hotelería",3,2,68000],["T-0126","18031987","03/11/2018",2018,"Nacional","Puerto Madryn","Chubut","Terrestre (bus + hotel)",3,2,95000],["T-0127","8278318","22/10/2019",2019,"Internacional","Cusco y Machu Picchu","Perú","Solo hotelería",4,2,297000],["T-0128","8278318","16/01/2022",2022,"Internacional","Florianópolis","Brasil","Paquete (aéreo + hotel)",3,1,860000],["T-0129","8278318","11/11/2023",2023,"Nacional","Ushuaia","Tierra del Fuego","Solo hotelería",3,3,179000],["T-0130","17807433","25/02/2017",2017,"Nacional","Iguazú","Misiones","Solo aéreo",14,2,158000],["T-0131","18593978","05/12/2018",2018,"Nacional","Mendoza","Mendoza","Solo aéreo",5,2,161000],["T-0132","17148752","27/07/2022",2022,"Nacional","Villa Carlos Paz","Córdoba","Solo hotelería",3,4,581000],["T-0133","23760570","07/07/2016",2016,"Internacional","Cusco y Machu Picchu","Perú","Paquete (aéreo + hotel)",7,2,733000],["T-0134","23760570","05/06/2025",2025,"Nacional","Villa Carlos Paz","Córdoba","Paquete (aéreo + hotel + traslados)",7,3,2295000],["T-0135","12324403","24/10/2019",2019,"Nacional","Salta y Jujuy","Noroeste","Paquete (aéreo + hotel + traslados)",7,2,348000],["T-0136","12324403","13/04/2023",2023,"Nacional","Mendoza","Mendoza","Paquete (aéreo + hotel)",14,3,899000],["T-0137","16382672","27/03/2016",2016,"Nacional","Salta y Jujuy","Noroeste","Terrestre (bus + hotel)",10,4,233000],["T-0138","16382672","24/01/2024",2024,"Internacional","Cusco y Machu Picchu","Perú","Paquete (aéreo + hotel)",10,1,1551000],["T-0139","16382672","07/10/2025",2025,"Internacional","Cancún","México","Paquete (aéreo + hotel)",7,2,3462000],["T-0140","16382672","03/03/2026",2026,"Nacional","Cataratas y Esteros del Iberá","Corrientes","Paquete (aéreo + hotel + traslados)",14,3,2394000],["T-0141","93555227","09/10/2021",2021,"Nacional","Villa Carlos Paz","Córdoba","Solo hotelería",7,2,123000],["T-0142","17929018","09/07/2018",2018,"Nacional","Villa Carlos Paz","Córdoba","Terrestre (bus + hotel)",14,2,76000],["T-0143","17929018","10/07/2019",2019,"Nacional","Bariloche","Río Negro","Paquete (aéreo + hotel)",7,2,139000],["T-0144","33213420","07/12/2015",2015,"Internacional","Santiago","Chile","Solo aéreo",10,4,494000],["T-0145","30155463","03/11/2016",2016,"Nacional","Salta y Jujuy","Noroeste","Solo aéreo",14,2,148000],["T-0146","7685323","04/05/2021",2021,"Nacional","Villa Carlos Paz","Córdoba","Solo hotelería",10,4,304000],["T-0147","28575224","27/10/2015",2015,"Internacional","Río de Janeiro","Brasil","Paquete (aéreo + hotel)",5,4,1682000],["T-0148","5608784","03/01/2025",2025,"Nacional","Ushuaia","Tierra del Fuego","Paquete (aéreo + hotel + traslados)",10,2,1560000],["T-0149","5608784","17/03/2026",2026,"Nacional","Ushuaia","Tierra del Fuego","Terrestre (bus + hotel)",3,4,1814000],["T-0150","21008315","21/02/2024",2024,"Internacional","Río de Janeiro","Brasil","Paquete (aéreo + hotel)",5,3,4848000],["T-0151","21008315","11/05/2025",2025,"Internacional","Punta del Este","Uruguay","Terrestre (bus + hotel)",5,4,4577000]]};
+const TODAY = new Date(2026,9,25);
+const STAGES=[["resumen","Resumen","Hoy vs. middleware"],["origen","Origen","Sistema de gestión"],["ingesta","Ingesta","Viaje al middleware"],["estandar","Estandarización","Reglas y calidad"],["perfil","Perfil unificado","Golden record"],["woowup","WoowUp","CRM y campañas"],["wise","Wise CX","Atención y ruteo"],["monitoreo","Monitoreo","Reportes por módulo"],["implementacion","Implementación","Plan y próximos pasos"]];
+const state={stage:"origen",dni:null,src:"S",extraP:[],extraT:[],lastRun:null,wuTab:"user",seg:null};
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=n=>"$ "+Math.round(n).toLocaleString("es-AR");
+const parseD=s=>{const [d,m,y]=s.split("/").map(Number);return new Date(y,m-1,d)};
+const iso=d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const monthsBetween=(a,b)=>(b.getFullYear()-a.getFullYear())*12+(b.getMonth()-a.getMonth())-(b.getDate()<a.getDate()?1:0);
+const addMonths=(d,n)=>new Date(d.getFullYear(),d.getMonth()+n,d.getDate());
+const slug=s=>s.normalize("NFD").replace(/[̀-ͯ]/g,"").toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"");
+
+/* ---------- Origen (con simulaciones) ---------- */
+function srcS(){return RAW.S} function srcP(){return RAW.P.concat(state.extraP)} function srcT(){return RAW.T.concat(state.extraT)}
+
+/* ---------- Reglas de estandarización ---------- */
+function normPhone(p){ // "341 15358-1447" -> +5493413581447
+  const m=String(p).match(/^(\d{2,4})\s*15\s*([\d-]+)$/); if(!m) return {e164:null,ok:false};
+  const local=m[2].replace(/\D/g,""); return {e164:"+549"+m[1]+local,area:m[1],local,ok:(m[1]+local).length===10};
+}
+const normDoc=v=>String(v??"").replace(/\D/g,"");
+const docType=v=>{const m=String(v).toUpperCase().match(/^(LE|LC|DNI|CI|PAS)/);return m?m[1]:"DNI"};
+const cap=s=>s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu,(a,b,c)=>b+c.toUpperCase());
+function campFamily(c){
+  if(/Aniversario/.test(c))return["ANIVERSARIO","Aniversario AMR"];
+  if(/Hot Sale/.test(c))return["HOT_SALE","Fechas comerciales"];
+  if(/Cyber/i.test(c))return["CYBER","Fechas comerciales"];
+  if(/Vacaciones/.test(c))return["VACACIONES","Turismo"];
+  if(/Equipamiento/.test(c))return["EQUIPAMIENTO","Profesional"];
+  if(/Emergencia/.test(c))return["EMERGENCIA","Necesidad"];
+  if(/CuotiCash/.test(c))return["CUOTICASH","Línea permanente"];
+  if(/Oportunidad/.test(c))return["OPORTUNIDAD","Línea permanente"];
+  return["OTRA","Otra"];
+}
+const modCode=m=>({"Paquete (aéreo + hotel)":"PAQ_AH","Paquete (aéreo + hotel + traslados)":"PAQ_AHT","Terrestre (bus + hotel)":"TER_BH","Solo hotelería":"HOTEL","Solo aéreo":"AEREO"}[m]||slug(m));
+
+function stdLoan(r){
+  const [id,dni,f,anio,camp,monto,cuotas,estado]=r; const d=parseD(f);
+  const el=Math.max(0,monthsBetween(d,TODAY)); const fin=addMonths(d,cuotas);
+  const pagadas=Math.min(cuotas,el); const rest=cuotas-pagadas; const [fam,grupo]=campFamily(camp);
+  const est=estado==="Vigente"?"VIGENTE":"CANCELADO";
+  let alerta=null; if(est==="VIGENTE"&&rest<=0) alerta="Figura vigente pero el plazo terminó el "+iso(fin);
+  return {id,dni:normDoc(dni),fecha:iso(d),date:d,anio,campana:camp,campana_code:slug(camp),familia:fam,grupo,monto,cuotas,estado:est,cuotas_pagadas_est:est==="VIGENTE"?pagadas:cuotas,cuotas_restantes_est:est==="VIGENTE"?Math.max(0,rest):0,fin_estimado:iso(fin),cuota_estimada:Math.round(monto/cuotas),alerta,sim:r.sim};
+}
+function stdTrip(r){
+  const [id,dni,f,anio,tipo,dest,pais,mod,noches,pax,imp]=r; const d=parseD(f);
+  return {id,dni:normDoc(dni),fecha:iso(d),date:d,anio,tipo:tipo.toUpperCase(),destino:dest,region:pais,modalidad:mod,modalidad_code:modCode(mod),sku:"TUR-"+(tipo==="Internacional"?"INT":"NAC")+"-"+modCode(mod)+"-"+slug(dest).slice(0,14),noches,pasajeros:pax,importe:imp,importe_por_pax:Math.round(imp/pax),sim:r.sim};
+}
+function stdSocio(r){
+  const [dni,ape,nom,prof,tel,mail,alta,grupo]=r; const ph=normPhone(tel);
+  return {dni:normDoc(dni),doc_tipo:docType(dni),apellido:cap(ape),nombre:cap(nom),profesion:prof,profesion_code:slug(prof.replace(/\/a$/,"")),telefono_origen:tel,telefono_e164:ph.e164,tel_ok:ph.ok,email:String(mail).trim().toLowerCase(),email_ok:/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(mail),anio_alta:alta,antiguedad:TODAY.getFullYear()-alta,grupo_prueba:grupo};
+}
+
+/* ---------- Perfil unificado + segmentos ---------- */
+let PROFILES={}, ORDER=[];
+const SEGS=[
+  {k:"AMBOS",l:"Turismo + Préstamos",c:"var(--blue)",f:p=>p.nT>0&&p.nP>0,why:"Tiene al menos un viaje y un préstamo"},
+  {k:"SOLO_TURISMO",l:"Solo Turismo",c:"var(--cyan)",f:p=>p.nT>0&&p.nP===0,why:"Viajes sí, préstamos nunca"},
+  {k:"SOLO_PRESTAMOS",l:"Solo Préstamos",c:"#6366f1",f:p=>p.nP>0&&p.nT===0,why:"Préstamos sí, viajes nunca"},
+  {k:"SIN_COMPRAS",l:"Sin compras",c:"var(--muted)",f:p=>p.nP===0&&p.nT===0,why:"Socio sin uso de ningún servicio"},
+  {k:"PRESTAMO_VIGENTE",l:"Préstamo vigente",c:"var(--blue)",f:p=>p.vig.length>0,why:"Al menos un préstamo en estado vigente"},
+  {k:"RENOVACION_PROXIMA",l:"Renovación próxima",c:"var(--green)",f:p=>p.vig.some(l=>l.cuotas_restantes_est>0&&l.cuotas_restantes_est<=6),why:"Vigente con 6 cuotas o menos por pagar"},
+  {k:"EX_TOMADOR",l:"Ex tomador",c:"#6366f1",f:p=>p.nP>0&&p.vig.length===0,why:"Tuvo préstamos, hoy todos cancelados"},
+  {k:"REVISAR_ESTADO",l:"Estado a revisar",c:"var(--orange)",f:p=>p.loans.some(l=>l.alerta),why:"Préstamo vigente con plazo ya cumplido"},
+  {k:"VIAJERO_INTERNACIONAL",l:"Viajero internacional",c:"var(--cyan)",f:p=>p.trips.some(t=>t.tipo==="INTERNACIONAL"),why:"Al menos un viaje fuera del país"},
+  {k:"VIAJERO_FRECUENTE",l:"Viajero frecuente",c:"var(--cyan)",f:p=>p.nT>=3,why:"3 viajes o más"},
+  {k:"VIAJO_ULT_12M",l:"Viajó en los últimos 12 meses",c:"var(--green)",f:p=>p.lastTrip&&monthsBetween(p.lastTrip.date,TODAY)<12,why:"Compra de turismo en el último año"},
+  {k:"TURISMO_DORMIDO",l:"Turismo dormido",c:"var(--orange)",f:p=>p.lastTrip&&monthsBetween(p.lastTrip.date,TODAY)>=24,why:"Última compra de turismo hace 24 meses o más"},
+  {k:"OPP_PRESTAMO_VIAJE",l:"Oportunidad: préstamo para viajar",c:"var(--orange)",f:p=>p.nT>0&&p.vig.length===0,why:"Viaja y hoy no tiene préstamo vigente"},
+  {k:"OPP_PRIMER_VIAJE",l:"Oportunidad: primer viaje",c:"var(--orange)",f:p=>p.nP>0&&p.nT===0,why:"Toma préstamos pero nunca compró turismo"},
+];
+function build(){
+  const S=srcS().map(stdSocio), P=srcP().map(stdLoan), T=srcT().map(stdTrip);
+  PROFILES={}; ORDER=[];
+  for(const s of S){PROFILES[s.dni]={...s,loans:[],trips:[]};ORDER.push(s.dni)}
+  for(const l of P) PROFILES[l.dni]?.loans.push(l);
+  for(const t of T) PROFILES[t.dni]?.trips.push(t);
+  for(const d of ORDER){const p=PROFILES[d];
+    p.loans.sort((a,b)=>a.date-b.date); p.trips.sort((a,b)=>a.date-b.date);
+    p.nP=p.loans.length; p.nT=p.trips.length; p.vig=p.loans.filter(l=>l.estado==="VIGENTE");
+    p.montoTotal=p.loans.reduce((a,l)=>a+l.monto,0); p.montoVig=p.vig.reduce((a,l)=>a+l.monto,0);
+    p.cuotasRest=p.vig.reduce((a,l)=>a+l.cuotas_restantes_est,0);
+    p.gastoTur=p.trips.reduce((a,t)=>a+t.importe,0); p.lastTrip=p.trips[p.nT-1]||null; p.lastLoan=p.loans[p.nP-1]||null;
+    p.nInt=p.trips.filter(t=>t.tipo==="INTERNACIONAL").length;
+    p.pref=p.nT?(p.nInt*2>=p.nT?"Internacional":"Nacional"):"—";
+    p.segs=SEGS.filter(s=>s.f(p)).map(s=>s.k);
+    p.grupo=SEGS.slice(0,4).find(s=>s.f(p)).k;
+  }
+  return {S,P,T};
+}
+let DATA=build();
+const cur=()=>PROFILES[state.dni];
+const segLabel=k=>SEGS.find(s=>s.k===k)?.l||k;
+const grupoLabel={AMBOS:"Ambos",SOLO_TURISMO:"Solo Turismo",SOLO_PRESTAMOS:"Solo Préstamos",SIN_COMPRAS:"Sin compras"};
+
+/* ---------- JSON coloreado ---------- */
+function hj(o){return esc(JSON.stringify(o,null,2)).replace(/(&quot;[^&]*?&quot;)(\s*:)/g,'<span class="k">$1</span>$2').replace(/:\s(&quot;.*?&quot;)/g,': <span class="s">$1</span>').replace(/:\s(-?\d+\.?\d*|true|false|null)/g,': <span class="n">$1</span>')}
+
+/* ---------- Navegación ---------- */
+function renderNav(){
+  $("#stageNav").innerHTML=STAGES.map(([k,t,s],i)=>`<button class="stage ${state.stage===k?"on":""}" data-s="${k}"><span class="n">${i===0?"★":i}</span><span><b>${t}</b><small>${s}</small></span></button>`).join("");
+  $$("#stageNav .stage").forEach(b=>b.onclick=()=>go(b.dataset.s));
+}
+function go(k){state.stage=k;$$(".panel").forEach(p=>p.classList.toggle("on",p.dataset.p===k));renderNav();renderStage();try{$("#stageNav .stage.on").scrollIntoView({block:"nearest",inline:"nearest"})}catch(e){};try{localStorage.setItem("amr_stage",k)}catch(e){}}
+function selectSocio(d){if(!PROFILES[d])return;state.dni=d;wxConv=[];const p=cur();$("#socioInput").value=`${p.dni} · ${p.apellido}, ${p.nombre}`;try{localStorage.setItem("amr_dni",d)}catch(e){};renderStage()}
+function toast(m){const t=$("#toast");t.textContent=m;t.hidden=false;clearTimeout(t._h);t._h=setTimeout(()=>t.hidden=true,3200)}
+
+/* ---------- Etapa 1 ---------- */
+const HEAD={S:["DNI","Apellido","Nombre","Profesión","Teléfono","Mail","Año de alta","Grupo (prueba)"],P:["ID préstamo","DNI","Fecha","Año","Campaña / línea","Monto ($)","Cuotas","Estado"],T:["ID venta","DNI","Fecha","Año","Tipo","Destino","País / región","Modalidad","Noches","Pasajeros","Importe ($)"]};
+const NUMC={S:[6],P:[5,6],T:[8,9,10]};
+function renderOrigen(){
+  $("#cntS").textContent=srcS().length;$("#cntP").textContent=srcP().length;$("#cntT").textContent=srcT().length;
+  $$("#srcTabs .subtab").forEach(b=>b.classList.toggle("on",b.dataset.t===state.src));
+  const rows={S:srcS(),P:srcP(),T:srcT()}[state.src]; const dniIdx=state.src==="S"?0:1;
+  const q=$("#srcSearch").value.trim().toLowerCase(); const only=$("#onlySel").checked;
+  const f=rows.filter(r=>(!only||normDoc(r[dniIdx])===state.dni)&&(!q||r.join(" ").toLowerCase().includes(q)));
+  $("#srcTable").innerHTML=`<thead><tr>${HEAD[state.src].map((h,i)=>`<th class="${NUMC[state.src].includes(i)?"num":""}">${h}</th>`).join("")}</tr></thead><tbody>`+
+    f.map(r=>`<tr data-d="${normDoc(r[dniIdx])}" class="${normDoc(r[dniIdx])===state.dni?"sel":""}">${r.map((c,i)=>`<td class="${NUMC[state.src].includes(i)?"num":""}">${esc(typeof c==="number"&&c>9999?c.toLocaleString("es-AR"):c)}${i===0&&r.sim?' <span class="chip orange">simulado</span>':""}</td>`).join("")}</tr>`).join("")+`</tbody>`;
+  $$("#srcTable tbody tr").forEach(tr=>tr.onclick=()=>selectSocio(tr.dataset.d));
+}
+
+/* ---------- Etapa 2 ---------- */
+function rawFor(d){
+  const s=srcS().find(r=>normDoc(r[0])===d);
+  const obj={socio:Object.fromEntries(HEAD.S.map((h,i)=>[h,s[i]]))};
+  obj.prestamos=srcP().filter(r=>normDoc(r[1])===d).map(r=>Object.fromEntries(HEAD.P.map((h,i)=>[h,r[i]])));
+  obj.turismo=srcT().filter(r=>normDoc(r[1])===d).map(r=>Object.fromEntries(HEAD.T.map((h,i)=>[h,r[i]])));
+  return obj;
+}
+function renderIngesta(){
+  $("#rawPayload").innerHTML=hj(rawFor(state.dni));
+  $("#resetSim").hidden=!(state.extraP.length||state.extraT.length);
+  const r=state.lastRun;
+  const k=r?[[r.socios,"socios leídos"],[r.prest,"préstamos"],[r.tur,"ventas turismo"],[r.wu,"upserts WoowUp"],[r.wuPurch,"compras enviadas a WoowUp"],[r.wx,"contactos Wise CX"],[r.dq,"alertas de calidad"],[r.ms+" ms","duración simulada"]]:[["—","socios leídos"],["—","upserts WoowUp"],["—","contactos Wise CX"],["—","alertas de calidad"]];
+  $("#runKpis").innerHTML=k.map(([v,l])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+}
+let running=false;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function logLine(cls,msg){const el=$("#log");const t=new Date();const ts=String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0")+":"+String(t.getSeconds()).padStart(2,"0");el.innerHTML+=`\n<span class="ts">${ts}</span> <span class="${cls}">${esc(msg)}</span>`;el.scrollTop=el.scrollHeight}
+function flowStep(i,on){$$("#flow .node").forEach(n=>{const k=+n.dataset.n;n.classList.toggle("active",k===i&&on);if(k<i)n.classList.add("ok")});$$("#flow .arrow").forEach(a=>a.classList.toggle("run",+a.dataset.a===i&&on))}
+function stageMark(idx){idx+=1;$$("#stageNav .stage").forEach((b,i)=>{if(i===0||i>6)return;b.classList.toggle("pulse",i===idx);if(i<idx)b.classList.add("done")})}
+async function runSync(delta){
+  if(running)return; running=true; $$("#runSync,#runSync2,#simLoan,#simTrip").forEach(b=>b.disabled=true);
+  if(state.stage!=="ingesta")go("ingesta");
+  $$("#flow .node").forEach(n=>n.classList.remove("ok"));
+  const t0=performance.now(); const el=$("#log"); el.innerHTML=`<span class="ts">—</span> <span class="info">${delta?"Corrida incremental disparada por cambio en origen":"Corrida completa · carga inicial"}</span>`;
+  DATA=build(); const P=DATA.P,T=DATA.T,S=DATA.S;
+  const affected=delta?[delta.dni]:ORDER;
+  stageMark(0);flowStep(0,true);await sleep(450);
+  if(delta){logLine("info",`Cursor updated_at > última corrida → 1 registro nuevo en ${delta.tabla}`);logLine("ok",`${delta.id} · DNI ${delta.dni}`)}
+  else{logLine("info","SELECT * FROM v_socios / v_prestamos / v_turismo");logLine("ok",`Socios: ${S.length} · Préstamos: ${P.length} · Turismo: ${T.length}`)}
+  stageMark(1);flowStep(1,true);await sleep(450);
+  logLine("info",`Staging crudo: ${delta?1:S.length+P.length+T.length} filas con hash SHA-1`);
+  stageMark(2);flowStep(2,true);await sleep(550);
+  const phonesOk=S.filter(s=>s.tel_ok).length;
+  logLine("ok",`Teléfonos a E.164: ${phonesOk}/${S.length} · Emails válidos: ${S.filter(s=>s.email_ok).length}/${S.length}`);
+  logLine("ok",`Campañas mapeadas a catálogo: ${new Set(P.map(l=>l.campana_code)).size} códigos · Modalidades turismo: ${new Set(T.map(t=>t.modalidad_code)).size}`);
+  const alerts=P.filter(l=>l.alerta);
+  if(alerts.length)logLine("warn",`${alerts.length} préstamos "Vigente" con plazo cumplido → enviados a revisión (no bloquean)`);
+  stageMark(3);flowStep(3,true);await sleep(500);
+  logLine("ok",`Perfiles recalculados: ${affected.length} · Segmentos evaluados: ${SEGS.length} reglas`);
+  if(delta){const p=PROFILES[delta.dni];logLine("info",`Segmentos de ${p.apellido}, ${p.nombre}: ${p.segs.join(", ")}`)}
+  stageMark(4);flowStep(4,true);await sleep(550);
+  const purch=delta?1:P.length+T.length;
+  logLine("ok",`WoowUp · PUT /users (upsert por DNI): ${affected.length} OK`);
+  logLine("ok",`WoowUp · POST /purchases: ${purch} OK (sucursales "Turismo AMR" y "Préstamos AMR")`);
+  stageMark(5);flowStep(5,true);await sleep(500);
+  logLine("ok",`Wise CX · upsert contacto por teléfono: ${affected.length} OK · campos personalizados actualizados`);
+  flowStep(6,false);$$("#flow .node").forEach(n=>n.classList.add("ok"));stageMark(6);
+  const ms=Math.round(performance.now()-t0);
+  logLine("ok",`Corrida finalizada sin errores · ${alerts.length} alertas de calidad para revisión`);
+  if(delta)monAddLive(delta);
+  state.lastRun={socios:delta?1:S.length,prest:P.length,tur:T.length,wu:affected.length,wuPurch:purch,wx:affected.length,dq:alerts.length,ms};
+  $("#runMeta").textContent=(delta?"Incremental":"Completa")+" · "+new Date().toLocaleTimeString("es-AR");
+  running=false;$$("#runSync,#runSync2,#simLoan,#simTrip").forEach(b=>b.disabled=false);
+  setTimeout(()=>$$("#stageNav .stage").forEach(b=>b.classList.remove("pulse")),200);
+  renderIngesta();toast(delta?"Cambio propagado: revise Perfil, WoowUp y Wise CX":"Sincronización completa. Recorra las etapas 3 a 6.");
+}
+function simLoan(){
+  const n=RAW.P.length+state.extraP.length+1; const id="P-"+String(n).padStart(4,"0");
+  const r=[id,state.dni,"25/10/2026",2026,"CuotiCash",900000,12,"Vigente"]; r.sim=true; state.extraP.push(r);
+  runSync({dni:state.dni,id,tabla:"préstamos"});
+}
+function simTrip(){
+  const n=RAW.T.length+state.extraT.length+1; const id="T-"+String(n).padStart(4,"0");
+  const r=[id,state.dni,"25/10/2026",2026,"Internacional","Florianópolis","Brasil","Paquete (aéreo + hotel)",7,2,2350000]; r.sim=true; state.extraT.push(r);
+  runSync({dni:state.dni,id,tabla:"turismo"});
+}
+
+/* ---------- Etapa 3 ---------- */
+function renderEstandar(){
+  const p=cur(); const raw=srcS().find(r=>normDoc(r[0])===p.dni);
+  $("#stdWho").textContent=p.apellido+", "+p.nombre;
+  const rules=[
+    ["Documento","Separa tipo (DNI, LE, LC) y número; el número es la clave de cruce",raw[0],`tipo: ${p.doc_tipo} · número: ${p.dni}`],
+    ["Nombre y apellido","Capitalización consistente",raw[2]+" "+raw[1],p.nombre+" "+p.apellido],
+    ["Teléfono","Quita el 15, agrega 54 9 + característica (E.164)",raw[4],p.telefono_e164],
+    ["Email","Minúsculas, sin espacios, validación de formato",raw[5],p.email+(p.email_ok?"  ✓":"  ✗")],
+    ["Profesión","Código estable sin género gramatical",raw[3],p.profesion_code],
+    ["Año de alta","Se agrega antigüedad calculada",String(raw[6]),`anio_alta: ${p.anio_alta} · antigüedad: ${p.antiguedad} años`],
+  ];
+  $("#rulesSocio").innerHTML=rules.map(([f,d,a,b])=>`<div class="rule"><div class="f">${f}<small>${d}</small></div><div class="a">${esc(a)}</div><div class="arr">→</div><div class="b">${esc(b)}</div></div>`).join("");
+  $("#stdLoans").innerHTML=p.loans.length?`<thead><tr><th>ID</th><th>Fecha ISO</th><th>Código campaña</th><th>Familia</th><th class="num">Monto</th><th class="num">Cuotas</th><th class="num">Restantes est.</th><th>Fin estimado</th><th>Estado</th></tr></thead><tbody>`+p.loans.map(l=>`<tr><td>${l.id}</td><td>${l.fecha}</td><td class="mono">${l.campana_code}</td><td>${l.familia}</td><td class="num">${money(l.monto)}</td><td class="num">${l.cuotas}</td><td class="num">${l.estado==="VIGENTE"?l.cuotas_restantes_est:"—"}</td><td>${l.fin_estimado}</td><td>${l.alerta?`<span class="chip orange" title="${esc(l.alerta)}">Revisar</span>`:`<span class="chip ${l.estado==="VIGENTE"?"blue":""}">${l.estado}</span>`}</td></tr>`).join("")+"</tbody>":`<tbody><tr><td class="muted">Este socio no tiene préstamos.</td></tr></tbody>`;
+  $("#stdTrips").innerHTML=p.trips.length?`<thead><tr><th>ID</th><th>Fecha ISO</th><th>SKU generado</th><th>Destino</th><th class="num">Noches</th><th class="num">Pax</th><th class="num">Importe</th><th class="num">Por pax</th></tr></thead><tbody>`+p.trips.map(t=>`<tr><td>${t.id}</td><td>${t.fecha}</td><td class="mono">${t.sku}</td><td>${esc(t.destino)} <span class="muted">· ${esc(t.region)}</span></td><td class="num">${t.noches}</td><td class="num">${t.pasajeros}</td><td class="num">${money(t.importe)}</td><td class="num">${money(t.importe_por_pax)}</td></tr>`).join("")+"</tbody>":`<tbody><tr><td class="muted">Este socio no tiene compras de turismo.</td></tr></tbody>`;
+  // DQ
+  const S=DATA.S,P=DATA.P,T=DATA.T; const dnis=new Set(S.map(s=>s.dni));
+  const orphanP=P.filter(l=>!dnis.has(l.dni)).length, orphanT=T.filter(t=>!dnis.has(t.dni)).length;
+  const alerts=P.filter(l=>l.alerta);
+  const grpOk=ORDER.filter(d=>grupoLabel[PROFILES[d].grupo]===PROFILES[d].grupo_prueba).length;
+  const dupMail=S.length-new Set(S.map(s=>s.email)).size;
+  const dq=[
+    [S.filter(s=>s.tel_ok).length===S.length,"Teléfonos normalizables",`${S.filter(s=>s.tel_ok).length} de ${S.length} convertidos a E.164 (requisito para que Wise CX identifique al socio en WhatsApp).`],
+    [S.filter(s=>s.email_ok).length===S.length,"Emails con formato válido",`${S.filter(s=>s.email_ok).length} de ${S.length}. Duplicados: ${dupMail}.`],
+    [dnis.size===S.length,"DNI único por socio",`${dnis.size} DNI distintos en ${S.length} filas.`],
+    [!S.some(s=>s.doc_tipo!=="DNI"),"Tipos de documento no estándar",`${S.filter(s=>s.doc_tipo!=="DNI").length} socio(s) con documento antiguo (${S.filter(s=>s.doc_tipo!=="DNI").map(s=>s.doc_tipo+"-"+s.dni).join(", ")||"ninguno"}). Sin esta regla su historial de turismo no se uniría al perfil.`],
+    [orphanP+orphanT===0,"Integridad referencial",`Préstamos sin socio: ${orphanP} · Ventas de turismo sin socio: ${orphanT}.`],
+    [alerts.length===0,"Estado de préstamos coherente con el plazo",`${alerts.length} préstamos figuran "Vigente" aunque su última cuota ya debió pagarse (${alerts.slice(0,6).map(a=>a.id).join(", ")}${alerts.length>6?"…":""}). Se sincronizan con etiqueta REVISAR_ESTADO para que AMR confirme.`],
+    [grpOk===S.length,"Grupo calculado vs. grupo de prueba",`${grpOk} de ${S.length} socios quedan en el mismo grupo que indica el archivo. El middleware lo calcula solo, no depende de esa columna.`],
+  ];
+  $("#dqList").innerHTML=dq.map(([ok,t,d])=>`<div class="dq"><span class="ic ${ok?"ok":"warn"}">${ok?"✓":"!"}</span><div><b>${t}</b><p>${esc(d)}</p></div></div>`).join("");
+  const camps={};P.forEach(l=>{camps[l.campana]??={code:l.campana_code,fam:l.familia,grupo:l.grupo,n:0,m:0};camps[l.campana].n++;camps[l.campana].m+=l.monto});
+  $("#catCamp").innerHTML=`<thead><tr><th>Origen</th><th>Código</th><th>Familia</th><th class="num">Ops.</th><th class="num">Monto total</th></tr></thead><tbody>`+Object.entries(camps).sort((a,b)=>b[1].n-a[1].n).map(([k,v])=>`<tr><td>${esc(k)}</td><td class="mono">${v.code}</td><td>${v.fam}</td><td class="num">${v.n}</td><td class="num">${money(v.m)}</td></tr>`).join("")+"</tbody>";
+}
+
+/* ---------- Etapa 4 ---------- */
+function renderPerfil(){
+  const p=cur();
+  $("#pfAvatar").textContent=p.nombre[0]+p.apellido[0];
+  $("#pfName").textContent=p.nombre+" "+p.apellido;
+  $("#pfSub").innerHTML=`DNI ${p.dni} · ${esc(p.profesion)} · socio desde ${p.anio_alta} · <span class="mono">${p.telefono_e164}</span>`;
+  $("#pfGroup").innerHTML=`<span class="chip blue">${grupoLabel[p.grupo]}</span>`;
+  const k=[[p.nT,"viajes comprados"],[p.nT?money(p.gastoTur):"—","gasto en turismo"],[p.lastTrip?p.lastTrip.destino:"—","último destino"],[p.nP,"préstamos tomados"],[p.vig.length?money(p.montoVig):"—","monto vigente"],[p.vig.length?p.cuotasRest:"—","cuotas restantes est."]];
+  $("#pfKpis").innerHTML=k.map(([v,l])=>`<div class="kpi"><div class="v" style="font-size:${String(v).length>12?15:20}px">${esc(v)}</div><div class="l">${l}</div></div>`).join("");
+  const ev=[...p.loans.map(l=>({d:l.date,f:l.fecha,c:l.alerta?"x":"p",h:`Préstamo ${l.campana} · ${money(l.monto)} en ${l.cuotas} cuotas`,s:`${l.id} · ${l.alerta?"Vigente con plazo cumplido (revisar)":l.estado==="VIGENTE"?`Vigente · ${l.cuotas_restantes_est} cuotas restantes`:"Cancelado"}${l.sim?" · simulado":""}`})),
+    ...p.trips.map(t=>({d:t.date,f:t.fecha,c:"t",h:`Viaje a ${t.destino} (${t.region})`,s:`${t.id} · ${t.modalidad} · ${t.noches} noches · ${t.pasajeros} pax · ${money(t.importe)}${t.sim?" · simulado":""}`}))].sort((a,b)=>b.d-a.d);
+  $("#pfTimeline").innerHTML=ev.length?ev.map(e=>`<li><span class="when">${e.f}</span><span class="pin ${e.c}"></span><span class="what">${esc(e.h)}<small>${esc(e.s)}</small></span></li>`).join(""):`<li><span></span><span></span><span class="muted">Sin movimientos. Este socio es candidato a campañas de activación.</span></li>`;
+  $("#pfSegs").innerHTML=SEGS.map(s=>{const y=p.segs.includes(s.k);return`<div class="seg-rule"><div><div style="font-weight:600;font-size:13px">${s.l} <span class="mono muted" style="font-size:11px">${s.k}</span></div><div class="why">${s.why}</div></div><span class="${y?"yes":"no"}">${y?"✓ Sí":"No"}</span></div>`}).join("");
+  const counts=SEGS.map(s=>[s,ORDER.filter(d=>PROFILES[d].segs.includes(s.k)).length]);
+  $("#segBars").innerHTML=counts.map(([s,n])=>`<div class="row ${state.seg===s.k?"on":""}" data-k="${s.k}"><span>${s.l}</span><span class="track"><span class="fill" style="display:block;width:${n}%;background:${s.c}"></span></span><span class="cnt">${n}</span></div>`).join("");
+  $$("#segBars .row").forEach(r=>r.onclick=()=>{state.seg=state.seg===r.dataset.k?null:r.dataset.k;renderPerfil()});
+  $("#segMembers").innerHTML=state.seg?ORDER.filter(d=>PROFILES[d].segs.includes(state.seg)).map(d=>`<button class="chip ${d===state.dni?"blue":""}" data-d="${d}">${PROFILES[d].apellido}, ${PROFILES[d].nombre[0]}.</button>`).join(""):`<span class="muted" style="font-size:12.5px">Elija un segmento para listar sus socios; clic en un nombre para seguirlo.</span>`;
+  $$("#segMembers [data-d]").forEach(b=>b.onclick=()=>selectSocio(b.dataset.d));
+}
+
+/* ---------- Etapa 5 ---------- */
+function wuUser(p){
+  const tags=p.segs.map(s=>s.toLowerCase());
+  return {service_uid:p.dni,document:p.dni,document_type:p.doc_tipo,first_name:p.nombre,last_name:p.apellido,email:p.email,cellphone:p.telefono_e164,tags,
+    custom_attributes:{profesion:p.profesion_code,anio_alta:p.anio_alta,antiguedad_anios:p.antiguedad,grupo_amr:p.grupo,
+      tur_cantidad_viajes:p.nT,tur_gasto_total:p.gastoTur,tur_ultimo_destino:p.lastTrip?.destino??null,tur_ultima_compra:p.lastTrip?.fecha??null,tur_preferencia:p.pref==="—"?null:p.pref.toUpperCase(),
+      pre_cantidad:p.nP,pre_vigentes:p.vig.length,pre_monto_vigente:p.montoVig,pre_cuotas_restantes:p.cuotasRest,pre_ultima_campana:p.lastLoan?.campana_code??null,pre_ultima_fecha:p.lastLoan?.fecha??null}};
+}
+function wuTur(p){return p.trips.map(t=>({service_uid:p.dni,invoice_number:t.id,branch_name:"Turismo AMR",createtime:t.fecha+"T12:00:00-03:00",purchase_detail:[{sku:t.sku,product_name:`${t.destino} · ${t.modalidad}`,category:["Turismo",t.tipo==="INTERNACIONAL"?"Internacional":"Nacional",t.region],quantity:t.pasajeros,unit_price:t.importe_por_pax,custom_attributes:{noches:t.noches}}],prices:{total:t.importe}}))}
+function wuPre(p){return p.loans.map(l=>({service_uid:p.dni,invoice_number:l.id,branch_name:"Préstamos AMR",createtime:l.fecha+"T12:00:00-03:00",purchase_detail:[{sku:"PRE-"+l.campana_code,product_name:l.campana,category:["Préstamos",l.familia],quantity:1,unit_price:l.monto,custom_attributes:{cuotas:l.cuotas,estado:l.estado,cuotas_restantes_est:l.cuotas_restantes_est}}],prices:{total:l.monto}}))}
+function renderWoow(){
+  const p=cur(); const u=wuUser(p);
+  const attrs=[["Documento",p.dni],["Celular",p.telefono_e164],["Email",p.email],["Profesión",p.profesion],["Grupo AMR",grupoLabel[p.grupo]],["Antigüedad",p.antiguedad+" años"],["Viajes",p.nT],["Gasto turismo",money(p.gastoTur)],["Último destino",p.lastTrip?.destino??"—"],["Préstamos vigentes",p.vig.length],["Monto vigente",p.vig.length?money(p.montoVig):"—"],["Cuotas restantes",p.vig.length?p.cuotasRest:"—"]];
+  const hist=[...p.trips.map(t=>({d:t.date,f:t.fecha,b:"Turismo AMR",n:`${t.destino} · ${t.modalidad}`,m:t.importe})),...p.loans.map(l=>({d:l.date,f:l.fecha,b:"Préstamos AMR",n:l.campana,m:l.monto}))].sort((a,b)=>b.d-a.d);
+  $("#wuProfile").innerHTML=`<div class="profile-head"><div class="avatar" style="background:var(--woow)">${p.nombre[0]}${p.apellido[0]}</div><div><h3>${esc(p.nombre+" "+p.apellido)}</h3><div class="muted" style="font-size:12.5px">ID externo ${p.dni} · actualizado por Middleware AMR</div></div></div>
+  <div><div class="eyebrow" style="color:var(--woow);margin-bottom:6px">Etiquetas</div><div class="chips">${u.tags.map(t=>`<span class="chip woow">${t}</span>`).join("")||'<span class="muted">—</span>'}</div></div>
+  <div class="attr-grid">${attrs.map(([l,v])=>`<div class="attr"><div class="l">${l}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>
+  <div><div class="eyebrow" style="color:var(--woow);margin-bottom:6px">Historial de compras por sucursal</div><div class="tbl-wrap" style="max-height:220px"><table><thead><tr><th>Fecha</th><th>Sucursal</th><th>Producto</th><th class="num">Importe</th></tr></thead><tbody>${hist.map(h=>`<tr><td>${h.f}</td><td><span class="chip ${h.b.startsWith("Tur")?"cyan":"blue"}">${h.b}</span></td><td>${esc(h.n)}</td><td class="num">${money(h.m)}</td></tr>`).join("")||'<tr><td colspan="4" class="muted">Sin compras</td></tr>'}</tbody></table></div></div>`;
+  $$("#wuTabs .subtab").forEach(b=>b.classList.toggle("on",b.dataset.t===state.wuTab));
+  let m,body,cnt;
+  if(state.wuTab==="user"){m=`<span class="verb put">PUT</span>/apiv3/users/${p.dni}`;body=u;cnt="1 cliente · upsert por DNI"}
+  else if(state.wuTab==="tur"){const a=wuTur(p);m=`<span class="verb">POST</span>/apiv3/purchases`;body=a.length?a:{info:"Sin compras de turismo para este socio"};cnt=a.length+" compras"}
+  else{const a=wuPre(p);m=`<span class="verb">POST</span>/apiv3/purchases`;body=a.length?a:{info:"Sin préstamos para este socio"};cnt=a.length+" compras"}
+  $("#wuMethod").innerHTML=m;$("#wuCount").textContent=cnt;$("#wuPayload").innerHTML=hj(body);
+  const camps=[
+    {seg:"OPP_PRESTAMO_VIAJE",n:"Viajá ahora, pagalo en cuotas",ch:"Email + WhatsApp",tr:"Mensual y 30 días antes de temporada",msg:p=>`Hola ${p.nombre}, ¿pensando en volver a ${p.lastTrip?.destino??"viajar"}? Con el Préstamo Vacaciones de AMR financiás tu próximo viaje.`},
+    {seg:"RENOVACION_PROXIMA",n:"Renovación anticipada",ch:"WhatsApp",tr:"Al quedar 6 cuotas o menos",msg:p=>`Hola ${p.nombre}, te quedan pocas cuotas de tu préstamo. Ya tenés una nueva línea preaprobada disponible.`},
+    {seg:"OPP_PRIMER_VIAJE",n:"Tu primer viaje con AMR",ch:"Email",tr:"Al cancelar un préstamo",msg:p=>`Hola ${p.nombre}, como socio/a de AMR tenés acceso a paquetes de turismo con beneficios exclusivos.`},
+    {seg:"TURISMO_DORMIDO",n:"Reactivación de viajeros",ch:"Email + SMS",tr:"24 meses sin compra de turismo",msg:p=>`${p.nombre}, hace tiempo que no viajás con nosotros. Mirá las salidas de esta temporada.`},
+    {seg:"SIN_COMPRAS",n:"Bienvenida a beneficios",ch:"Email",tr:"Socios sin uso de servicios",msg:p=>`Hola ${p.nombre}, conocé todo lo que AMR tiene para vos: turismo y préstamos para socios.`},
+    {seg:"REVISAR_ESTADO",n:"Control interno (no comercial)",ch:"Alerta al equipo AMR",tr:"Diaria",msg:()=>`Préstamos marcados vigentes con plazo cumplido. Excluidos de campañas de préstamo hasta revisar.`},
+  ];
+  $("#wuCamps").innerHTML=camps.map(c=>{const mem=ORDER.filter(d=>PROFILES[d].segs.includes(c.seg));const inC=p.segs.includes(c.seg);const sample=inC?p:PROFILES[mem[0]]||p;return`<div class="camp"><div class="h"><b>${c.n}</b><span class="chip woow">${mem.length} socios</span></div><div class="muted" style="font-size:12px">Segmento <span class="mono">${c.seg.toLowerCase()}</span> · ${c.ch} · ${c.tr}</div><div class="msg">${esc(c.msg(sample))}</div><div style="font-size:12px">${inC?'<span class="yes">✓ El socio seleccionado entra en esta audiencia</span>':'<span class="no">El socio seleccionado no entra · ejemplo con '+esc(sample.nombre+" "+sample.apellido)+'</span>'}</div></div>`}).join("");
+}
+
+/* ---------- Etapa 6 ---------- */
+function route(p,msg){
+  const m=msg.toLowerCase(); const st=[];
+  const kwT=/(viaj|paquete|turismo|destino|hotel|vacaciones|brasil|vuelo|pasaje)/.test(m), kwP=/(préstamo|prestamo|cuota|crédito|credito|financ|pago)/.test(m);
+  st.push({hit:kwT||kwP,t:`Intención por palabras clave: ${kwT&&kwP?"turismo y préstamos":kwT?"turismo":kwP?"préstamos":"no detectada"}`});
+  let q,why;
+  if(kwT&&kwP){q="Préstamos";why="Pide financiar un viaje: lo toma Préstamos con el contexto de turismo visible, y se etiqueta para que Turismo cotice."}
+  else if(kwP){q="Préstamos";why=p.vig.length?`Tiene ${p.vig.length} préstamo(s) vigente(s): el agente ve cuotas restantes sin consultar otro sistema.`:"Consulta de préstamos sin préstamo vigente: se trata como venta nueva."}
+  else if(kwT){q="Turismo";why=p.nT?`Viajero con ${p.nT} compra(s); último destino ${p.lastTrip.destino}.`:"Sin viajes previos: oportunidad de primer viaje."}
+  else{st.push({hit:true,t:"Sin intención clara → se usa el perfil del socio"});
+    if(p.segs.includes("RENOVACION_PROXIMA")||p.vig.length){q="Préstamos";why="Prioridad por préstamo vigente en el perfil."}
+    else if(p.segs.includes("VIAJO_ULT_12M")||p.nT){q="Turismo";why="Prioridad por historial de turismo."}
+    else{q="Atención general (bot de menú)";why="Socio sin historial: el bot ofrece menú Turismo / Préstamos."}}
+  st.push({hit:true,t:`Perfil: ${grupoLabel[p.grupo]} · ${p.vig.length} préstamo(s) vigente(s) · ${p.nT} viaje(s)`});
+  st.push({hit:true,t:`Cola asignada: ${q}`});
+  return {q,why,st};
+}
+let wxConv=[];
+function wxContact(p){return {phone:p.telefono_e164,name:p.nombre+" "+p.apellido,email:p.email,tags:p.segs.filter(s=>!s.startsWith("OPP_")).map(s=>s.toLowerCase()),custom_fields:{dni:p.dni,grupo_amr:p.grupo,prestamos_vigentes:p.vig.length,monto_vigente:p.montoVig,cuotas_restantes:p.cuotasRest,ultima_campana_prestamo:p.lastLoan?.campana??null,viajes:p.nT,ultimo_viaje:p.lastTrip?`${p.lastTrip.destino} (${p.lastTrip.fecha})`:null,oportunidad:p.segs.filter(s=>s.startsWith("OPP_")).map(s=>s.toLowerCase()).join(",")||null}}}
+function renderWise(){
+  const p=cur(); const msg=$("#wxMsg").value; const r=route(p,msg);
+  $("#wxHead").innerHTML=`<div class="avatar" style="width:36px;height:36px;font-size:13px;background:var(--wise)">${p.nombre[0]}${p.apellido[0]}</div><div><b>${esc(p.nombre+" "+p.apellido)}</b><div class="mono muted" style="font-size:11.5px">WhatsApp ${p.telefono_e164}</div></div><span class="chip wise" style="margin-left:auto">Cola: ${esc(r.q)}</span>`;
+  const conv=wxConv.length?wxConv:[{c:"in",t:msg}];
+  $("#wxBody").innerHTML=`<div class="bub sys">Contacto reconocido por teléfono · datos del Middleware AMR</div>`+conv.map(b=>`<div class="bub ${b.c}">${esc(b.t)}${b.m?`<span class="meta">${esc(b.m)}</span>`:""}</div>`).join("");
+  const l=p.vig[p.vig.length-1];
+  $("#wxSide").innerHTML=`<div><h4>Contexto del socio</h4><dl class="kv" style="margin-top:6px"><dt>DNI</dt><dd>${p.dni}</dd><dt>Grupo</dt><dd>${grupoLabel[p.grupo]}</dd><dt>Profesión</dt><dd>${esc(p.profesion)}</dd><dt>Socio desde</dt><dd>${p.anio_alta}</dd></dl></div>
+  <div><h4>Préstamos</h4><dl class="kv" style="margin-top:6px"><dt>Vigentes</dt><dd>${p.vig.length}</dd>${l?`<dt>Último vigente</dt><dd>${esc(l.campana)}</dd><dt>Monto</dt><dd>${money(l.monto)}</dd><dt>Cuotas rest.</dt><dd>${l.alerta?'<span class="chip orange">revisar</span>':l.cuotas_restantes_est+" de "+l.cuotas}</dd>`:`<dt>Historial</dt><dd>${p.nP} cancelado(s)</dd>`}</dl></div>
+  <div><h4>Turismo</h4><dl class="kv" style="margin-top:6px"><dt>Viajes</dt><dd>${p.nT}</dd><dt>Último</dt><dd>${p.lastTrip?esc(p.lastTrip.destino)+" · "+p.lastTrip.anio:"—"}</dd><dt>Preferencia</dt><dd>${p.pref}</dd></dl></div>
+  <div><h4>Etiquetas</h4><div class="chips" style="margin-top:6px">${wxContact(p).tags.map(t=>`<span class="chip wise">${t}</span>`).join("")||'<span class="muted">—</span>'}</div></div>`;
+  $("#wxTrace").innerHTML=`<div class="queue" style="color:var(--wise)">${esc(r.q)}</div><p class="muted" style="margin:4px 0 10px;font-size:13px">${esc(r.why)}</p><div class="trace">${r.st.map((s,i)=>`<div class="st ${s.hit?"hit":""}"><i>${i+1}</i><span>${esc(s.t)}</span></div>`).join("")}</div>`;
+  $("#wxMethod").innerHTML=`<span class="verb put">PUT</span>/contacts?phone=${encodeURIComponent(p.telefono_e164)} <span class="muted" style="font-family:var(--f-body)">(endpoint a confirmar con Wise CX)</span>`;
+  $("#wxPayload").innerHTML=hj(wxContact(p));
+}
+function wxSend(){
+  const p=cur(),msg=$("#wxMsg").value,r=route(p,msg);
+  let reply;
+  if(r.q==="Préstamos"&&p.vig.length&&/cuota/.test(msg.toLowerCase())){const l=p.vig[p.vig.length-1];reply=l.alerta?`Hola ${p.nombre}, estoy verificando el estado de tu préstamo ${l.id} con el área. Te confirmo en breve.`:`Hola ${p.nombre}, de tu préstamo ${l.campana} (${l.id}) te quedan ${l.cuotas_restantes_est} cuotas de ${money(l.cuota_estimada)} aprox.`}
+  else if(r.q==="Turismo")reply=`Hola ${p.nombre}, ${p.lastTrip?`vi que viajaste a ${p.lastTrip.destino}. `:""}Te paso las salidas disponibles. ¿Para cuántas personas sería?`;
+  else if(r.q==="Préstamos")reply=`Hola ${p.nombre}, sí. ${p.nT?"Como ya viajaste con AMR, ":""}te puedo ofrecer el Préstamo Vacaciones. ¿Qué monto estás pensando?`;
+  else reply=`Hola ${p.nombre}, soy el asistente de AMR. Escribí 1 para Turismo o 2 para Préstamos.`;
+  wxConv=[{c:"in",t:msg,m:"WhatsApp · ahora"},{c:"out",t:reply,m:`Agente cola ${r.q} · respuesta sugerida con datos del perfil`}];
+  renderWise();
+}
+
+/* ---------- Resumen y calculadora ---------- */
+const segCount=k=>ORDER.filter(d=>PROFILES[d].segs.includes(k)).length;
+function avg(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:0}
+function calcAuds(){
+  const vac=avg(DATA.P.filter(l=>l.familia==="VACACIONES").map(l=>l.monto));
+  const allP=avg(DATA.P.map(l=>l.monto)); const tur=avg(DATA.T.map(t=>t.importe));
+  return [
+    {k:"OPP_PRESTAMO_VIAJE",l:"Viajeros sin préstamo vigente → Préstamo Vacaciones",prod:"pre",ticket:vac,th:"Promedio de los Préstamo Vacaciones del set"},
+    {k:"RENOVACION_PROXIMA",l:"Préstamos por terminar → renovación",prod:"pre",ticket:allP,th:"Promedio de todos los préstamos del set"},
+    {k:"EX_TOMADOR",l:"Ex tomadores → nuevo préstamo",prod:"pre",ticket:allP,th:"Promedio de todos los préstamos del set"},
+    {k:"OPP_PRIMER_VIAJE",l:"Tomadores sin turismo → primer viaje",prod:"tur",ticket:tur,th:"Importe promedio de las ventas de turismo del set"},
+    {k:"TURISMO_DORMIDO",l:"Viajeros sin compra hace 2 años o más → reactivación",prod:"tur",ticket:tur,th:"Importe promedio de las ventas de turismo del set"},
+    {k:"SIN_COMPRAS",l:"Socios sin uso → primer viaje",prod:"tur",ticket:tur,th:"Importe promedio de las ventas de turismo del set"},
+  ];
+}
+function renderResumen(){
+  const n=ORDER.length;
+  const bigs=[
+    [segCount("AMBOS")+"%","usan Turismo y Préstamos","35 de cada 100 socios del set","AMBOS",true],
+    [segCount("OPP_PRESTAMO_VIAJE"),"viajeros sin préstamo vigente","Audiencia para Préstamo Vacaciones","OPP_PRESTAMO_VIAJE"],
+    [segCount("OPP_PRIMER_VIAJE"),"toman préstamos y nunca viajaron","Audiencia para un primer viaje","OPP_PRIMER_VIAJE"],
+    [segCount("TURISMO_DORMIDO"),"viajeros sin compra hace 2 años o más","Audiencia de reactivación","TURISMO_DORMIDO"],
+    [segCount("SIN_COMPRAS"),"socios sin uso de servicios","Audiencia de bienvenida","SIN_COMPRAS"],
+  ];
+  bigs[0][0]=Math.round(segCount("AMBOS")/n*100)+"%"; bigs[0][2]=`${segCount("AMBOS")} de ${n} socios del set`;
+  $("#bigNums").innerHTML=bigs.map(([v,l,s,k])=>`<button class="big" data-k="${k}"><span class="v">${v}</span><span class="l">${l}</span><span class="s">${s}</span><span class="go">Ver socios →</span></button>`).join("");
+  $$("#bigNums .big").forEach(b=>b.onclick=()=>{state.seg=b.dataset.k;go("perfil")});
+  const auds=calcAuds(); const sel=$("#cAud");
+  if(!sel.options.length){sel.innerHTML=auds.map(a=>`<option value="${a.k}">${a.l} (${segCount(a.k)} en el set)</option>`).join("");$("#cTicket").value=Math.round(auds[0].ticket/1000)*1000}
+  else [...sel.options].forEach((o,i)=>o.textContent=`${auds[i].l} (${segCount(auds[i].k)} en el set)`);
+  renderCalc();
+}
+function renderCalc(){
+  const a=calcAuds().find(x=>x.k===$("#cAud").value); const nSet=segCount(a.k);
+  const base=Math.max(ORDER.length,+$("#cBase").value||ORDER.length); const conv=+$("#cConv").value; const ticket=+$("#cTicket").value||0;
+  const aud=Math.round(nSet*base/ORDER.length); const cv=Math.round(aud*conv/100); const tot=cv*ticket;
+  $("#cConvV").textContent=conv+"%"; $("#cAudHint").textContent=`${nSet} socios del set cumplen la regla del segmento ${a.k.toLowerCase()}.`;
+  $("#cTicketL").textContent=a.prod==="pre"?"Monto promedio por préstamo ($)":"Importe promedio por venta de turismo ($)";
+  $("#cTicketHint").textContent=`${a.th}: ${money(a.ticket)}.`;
+  $("#cOut").innerHTML=`<div class="row"><span>Audiencia proyectada</span><b>${aud.toLocaleString("es-AR")} socios</b></div>
+  <div class="row"><span>Conversiones esperadas</span><b>${cv.toLocaleString("es-AR")}</b></div>
+  <div class="row main"><span>${a.prod==="pre"?"Monto colocado en préstamos":"Ventas de turismo generadas"}</span><b>${money(tot)}</b></div>
+  <div class="f">${nSet} × ${base.toLocaleString("es-AR")}/${ORDER.length} socios × ${conv}% × ${money(ticket)}</div>
+  <div style="font-size:12px;opacity:.8">Por campaña. Con disparadores automáticos la audiencia se renueva sola cada mes.</div>`;
+}
+
+/* ---------- Monitoreo ---------- */
+const MODS=[{k:"socios",l:"Socios",c:"var(--c-soc)"},{k:"prestamos",l:"Préstamos",c:"var(--blue)"},{k:"turismo",l:"Turismo",c:"var(--cyan)"}];
+const nowMin=()=>{const d=new Date();return Math.max(9*60,d.getHours()*60+d.getMinutes())};
+const hhmm=m=>String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+let MON=null; state.mod="general";
+function rng(seed){return()=>{seed=(seed*1664525+1013904223)%4294967296;return seed/4294967296}}
+function buildMon(){
+  const R=rng(20261025), corte=nowMin()-5, ev=[];
+  const t=()=>Math.floor(7*60+R()*Math.max(60,corte-7*60));
+  const pick=(arr,n)=>{const a=[...arr],o=[];while(o.length<n&&a.length)o.push(a.splice(Math.floor(R()*a.length),1)[0]);return o};
+  for(const d of pick(ORDER,14)){const p=PROFILES[d];ev.push({t:t(),mod:"socios",id:p.dni,dni:d,desc:R()<.5?"Actualización de datos de contacto":"Recálculo de segmentos",wu:"ok",wx:"ok"})}
+  const alertLoans=DATA.P.filter(l=>l.alerta).slice(0,2);
+  for(const l of alertLoans.concat(pick(DATA.P.filter(l=>!l.alerta),20))){ev.push({t:t(),mod:"prestamos",id:l.id,dni:l.dni,desc:l.estado==="VIGENTE"?"Recálculo de cuotas":"Cambio de estado",wu:"ok",wx:"ok",warn:l.alerta?"Vigente con plazo cumplido · enviado con etiqueta revisar_estado":null})}
+  const le=DATA.T.find(x=>x.id==="T-0053");
+  for(const x of [le].filter(Boolean).concat(pick(DATA.T.filter(x=>x.id!=="T-0053"),10))){ev.push({t:t(),mod:"turismo",id:x.id,dni:x.dni,desc:R()<.6?"Modificación de reserva":"Confirmación de pago",wu:"ok",wx:"ok",info:x.id==="T-0053"?"Documento LE-6067995 normalizado a 6067995 · unido al socio":null})}
+  ev.sort((a,b)=>a.t-b.t);
+  const P=ev.filter(e=>e.mod==="prestamos"&&!e.warn), T=ev.filter(e=>e.mod==="turismo"&&!e.info), S=ev.filter(e=>e.mod==="socios");
+  P[3].wu="retry";P[3].msg="WoowUp HTTP 429 (límite de pedidos) · reintento automático OK a los 30 s";
+  S[5].wu="retry";S[5].msg="WoowUp HTTP 429 (límite de pedidos) · reintento automático OK a los 30 s";
+  P[9].wu="error";P[9].msg="WoowUp HTTP 422 · la compra ya existe con otro importe; requiere revisión antes de reenviar";P[9].att=3;P[9].open=true;P[9].kind="upd";
+  T[4].wx="error";T[4].msg="Wise CX sin respuesta (timeout 30 s) · 3 reintentos fallidos, en cola de errores";T[4].att=3;T[4].open=true;
+  MON={ev,corte};
+}
+function monAddLive(delta){
+  if(!MON)buildMon();
+  MON.ev.push({t:nowMin(),mod:delta.tabla==="préstamos"?"prestamos":"turismo",id:delta.id,dni:delta.dni,desc:"Alta nueva (simulada en la demo)",wu:"ok",wx:"ok",live:true});
+  MON.ev.push({t:nowMin(),mod:"socios",id:delta.dni,dni:delta.dni,desc:"Recálculo de segmentos por alta nueva",wu:"ok",wx:"ok",live:true});
+  MON.corte=Math.max(MON.corte,nowMin());
+}
+function modStats(k){
+  const ev=MON.ev.filter(e=>k==="general"||e.mod===k);
+  const wuOk=ev.filter(e=>e.wu!=="error").length, wxOk=ev.filter(e=>e.wx!=="error").length;
+  const errs=ev.filter(e=>e.open), warns=ev.filter(e=>e.warn), retries=ev.filter(e=>!e.fixed&&(e.wu==="retry"||e.wx==="retry"));
+  const last=ev.length?ev[ev.length-1].t:null;
+  const st=errs.length?"err":warns.length?"warn":"ok";
+  return {ev,wuOk,wxOk,errs,warns,retries,last,st};
+}
+const stLabel={ok:"Operando OK",warn:"Con advertencias",err:"Con errores"};
+function reconRows(k){
+  const openWU=m=>MON.ev.filter(e=>e.mod===m&&e.open&&e.wu==="error"&&e.kind!=="upd").length;
+  const updWU=m=>MON.ev.filter(e=>e.mod===m&&e.open&&e.wu==="error"&&e.kind==="upd").length;
+  const openWX=MON.ev.filter(e=>e.open&&e.wx==="error").length;
+  const rows=[
+    {m:"socios",l:"Socios",o:srcS().length,mw:ORDER.length,wu:ORDER.length-openWU("socios"),wx:ORDER.length-openWX,wxl:"contactos al día"},
+    {m:"prestamos",l:"Préstamos",o:srcP().length,mw:DATA.P.length,wu:DATA.P.length-updWU("prestamos")-openWU("prestamos"),wx:null,wxl:"resumen en ficha"},
+    {m:"turismo",l:"Turismo",o:srcT().length,mw:DATA.T.length,wu:DATA.T.length-openWU("turismo"),wx:null,wxl:"resumen en ficha"},
+  ];
+  return k==="general"?rows:rows.filter(r=>r.m===k);
+}
+function renderMonitor(){
+  if(!MON)buildMon();
+  const k=state.mod;
+  $("#monDate").innerHTML=`Domingo 25/10/2026 · corte ${hhmm(MON.corte)} hs<br>Datos de operación simulados`;
+  $("#monTabs").innerHTML=[["general","Todos los módulos"]].concat(MODS.map(m=>[m.k,m.l])).map(([v,l])=>`<button class="subtab ${k===v?"on":""}" data-m="${v}">${l}</button>`).join("");
+  $$("#monTabs .subtab").forEach(b=>b.onclick=()=>{state.mod=b.dataset.m;renderMonitor()});
+  $("#monCards").innerHTML=MODS.map(m=>{const s=modStats(m.k);return`<button class="modcard ${k===m.k?"on":""}" data-m="${m.k}"><div class="top"><b><span class="sw" style="background:${m.c}"></span>${m.l}</b><span class="pill ${s.st}">${stLabel[s.st]}</span></div>
+    <div class="nums"><div><div class="v">${s.ev.length}</div><div class="l">viajaron hoy</div></div><div><div class="v">${s.wuOk}/${s.ev.length}</div><div class="l">OK en WoowUp</div></div><div><div class="v">${s.wxOk}/${s.ev.length}</div><div class="l">OK en Wise CX</div></div></div>
+    <div class="foot">${s.errs.length} error(es) abierto(s) · ${s.warns.length} advertencia(s) · ${s.retries.length} reintento(s) automático(s) · última novedad ${s.last!=null?hhmm(s.last):"—"}</div></button>`}).join("");
+  $$("#monCards .modcard").forEach(b=>b.onclick=()=>{state.mod=state.mod===b.dataset.m?"general":b.dataset.m;renderMonitor()});
+  const s=modStats(k); const mw=s.ev.length;
+  $("#monFunSub").textContent=k==="general"?"todos los módulos":MODS.find(m=>m.k===k).l;
+  $("#monFunnel").innerHTML=[[s.ev.length,"leídos del origen"],[mw,"estandarizados"],[s.wuOk,"entregados a WoowUp"],[s.wxOk,"entregados a Wise CX"]].map(([v,l],i)=>`<div><div class="v ${i>1&&v<mw?"st-err":""}">${v}</div><div class="l">${l}</div></div>`).join("");
+  // gráfico
+  const h0=0,h1=Math.floor(MON.corte/60); const hours=[];for(let h=h0;h<=h1;h++)hours.push(h);
+  const mods=k==="general"?MODS:MODS.filter(m=>m.k===k);
+  const byH=hours.map(h=>mods.map(m=>s.ev.filter(e=>e.mod===m.k&&Math.floor(e.t/60)===h).length));
+  const max=Math.max(4,...byH.map(a=>a.reduce((x,y)=>x+y,0))); const W=640,H=170,pl=24,pb=20,bw=(W-pl)/hours.length;
+  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Registros procesados por hora">`;
+  for(let g=0;g<=max;g+=Math.ceil(max/4)){const y=H-pb-(g/max)*(H-pb-10);svg+=`<line x1="${pl}" x2="${W}" y1="${y}" y2="${y}" style="stroke:var(--line)" stroke-width="1"/><text x="${pl-6}" y="${y+3}" text-anchor="end">${g}</text>`}
+  hours.forEach((h,i)=>{let y=H-pb;byH[i].forEach((v,j)=>{if(!v)return;const hh=(v/max)*(H-pb-10);y-=hh;svg+=`<rect x="${pl+i*bw+2}" y="${y}" width="${Math.max(2,bw-4)}" height="${hh}" rx="2" style="fill:${mods[j].c}"><title>${hhmm(h*60)} · ${mods[j].l}: ${v}</title></rect>`});if(h%3===0)svg+=`<text x="${pl+i*bw+bw/2}" y="${H-5}" text-anchor="middle">${String(h).padStart(2,"0")}h</text>`});
+  $("#monChart").innerHTML=svg+"</svg>"+`<div class="legend">${mods.map(m=>`<span><i style="background:${m.c}"></i>${m.l}</span>`).join("")}</div>`;
+  // errores
+  const items=[...s.errs.map(e=>({e,t:"err"})),...s.ev.filter(e=>e.fixed).map(e=>({e,t:"fixed"})),...s.retries.map(e=>({e,t:"retry"})),...s.warns.map(e=>({e,t:"warn"})),...s.ev.filter(e=>e.info).map(e=>({e,t:"info"}))];
+  $("#monErrSub").textContent=`${s.errs.length} abiertos · ${s.warns.length} advertencias`;
+  const badge={err:'<span class="chip red">Error abierto</span>',fixed:'<span class="chip green">Resuelto manual</span>',retry:'<span class="chip green">Reintento OK</span>',warn:'<span class="chip orange">Advertencia</span>',info:'<span class="chip blue">Corregido por regla</span>'};
+  $("#monErr").innerHTML=items.length?`<thead><tr><th>Hora</th><th>Módulo</th><th>Registro</th><th>Estado</th><th>Detalle</th></tr></thead><tbody>`+items.map(({e,t})=>`<tr data-d="${e.dni}"><td>${hhmm(e.t)}</td><td>${MODS.find(m=>m.k===e.mod).l}</td><td class="mono">${e.id}</td><td>${badge[t]}${t==="err"?`<div style="margin-top:6px"><button class="btn small" data-retry="${e.id}">Reintentar</button></div>`:""}</td><td style="white-space:normal;min-width:220px">${esc(e.msg||e.warn||e.info)}</td></tr>`).join("")+"</tbody>":`<tbody><tr><td class="muted">Sin errores ni advertencias en este módulo.</td></tr></tbody>`;
+  $$("#monErr [data-retry]").forEach(b=>b.onclick=ev=>{ev.stopPropagation();const e=MON.ev.find(x=>x.id===b.dataset.retry&&x.open);e.open=false;e.fixed=true;if(e.wu==="error")e.wu="retry";if(e.wx==="error")e.wx="retry";e.msg+=" → reenviado manualmente, respuesta OK";toast(`${e.id} reenviado: respuesta OK`);renderMonitor()});
+  // eventos
+  const stc=v=>v==="ok"?'<span class="st-ok">✓ OK</span>':v==="retry"?'<span class="st-warn">↻ OK tras reintento</span>':'<span class="st-err">✕ Error</span>';
+  $("#monEv").innerHTML=`<thead><tr><th>Hora</th><th>Módulo</th><th>Registro</th><th>Socio</th><th>Evento</th><th>Middleware</th><th>WoowUp</th><th>Wise CX</th></tr></thead><tbody>`+[...s.ev].reverse().map(e=>{const p=PROFILES[e.dni];return`<tr data-d="${e.dni}" class="${e.dni===state.dni?"sel":""}"><td>${hhmm(e.t)}</td><td>${MODS.find(m=>m.k===e.mod).l}</td><td class="mono">${e.id}${e.live?' <span class="chip orange">demo</span>':""}</td><td>${p?esc(p.apellido+", "+p.nombre):"—"}</td><td>${esc(e.desc)}</td><td>${e.warn?'<span class="st-warn">! Advertencia</span>':'<span class="st-ok">✓ OK</span>'}</td><td>${stc(e.wu)}</td><td>${stc(e.wx)}</td></tr>`}).join("")+"</tbody>";
+  $$("#monEv tbody tr,#monErr tbody tr[data-d]").forEach(tr=>tr.onclick=()=>{selectSocio(tr.dataset.d);toast("Socio seleccionado: "+PROFILES[tr.dataset.d].apellido)});
+  // conciliación
+  const rr=reconRows(k);
+  $("#monRec").innerHTML=`<thead><tr><th>Módulo</th><th class="num">Origen</th><th class="num">Middleware</th><th class="num">WoowUp al día</th><th class="num">Wise CX al día</th></tr></thead><tbody>`+rr.map(r=>`<tr><td>${r.l}</td><td class="num">${r.o}</td><td class="num ${r.mw!==r.o?"st-err":""}">${r.mw}</td><td class="num ${r.wu!==r.mw?"st-err":"st-ok"}">${r.wu}</td><td class="num ${r.wx!=null&&r.wx!==r.mw?"st-err":""}">${r.wx!=null?r.wx:'<span class="muted">'+r.wxl+'</span>'}</td></tr>`).join("")+"</tbody>";
+  // chequeos
+  const dnis=new Set(ORDER); const orphans=(k==="general"||k==="prestamos"?DATA.P.filter(l=>!dnis.has(l.dni)).length:0)+(k==="general"||k==="turismo"?DATA.T.filter(t=>!dnis.has(t.dni)).length:0);
+  const recOk=rr.every(r=>r.mw===r.o&&r.wu===r.mw&&(r.wx==null||r.wx===r.mw));
+  const lat=MON.corte-(s.last??MON.corte);
+  const checks=[
+    [s.ev.length>0,"Hubo actividad hoy",`${s.ev.length} registros procesados en ${Math.floor(MON.corte/15)+1} corridas.`],
+    [recOk,"Los totales coinciden con el origen",recOk?"Origen, middleware y destinos tienen la misma cantidad de registros.":"Hay diferencias entre origen y destino: revise los errores abiertos."],
+    [s.errs.length===0,"Sin errores abiertos",s.errs.length?`${s.errs.length} registro(s) no llegaron a destino y esperan reintento manual.`:"Todos los envíos del día tuvieron respuesta OK."],
+    [orphans===0,"Sin registros huérfanos",`${orphans} movimiento(s) sin socio asociado.`],
+    [s.warns.length===0,"Calidad de datos",s.warns.length?`${s.warns.length} advertencia(s): se envían igual, marcadas para revisión de AMR.`:"Sin advertencias de calidad."],
+    [true,"Frecuencia de sincronización",`Última novedad hace ${lat} min · corridas cada 15 min.`],
+  ];
+  $("#monChecks").innerHTML=checks.map(([ok,t,d])=>`<div class="dq"><span class="ic ${ok?"ok":"warn"}">${ok?"✓":"!"}</span><div><b>${t}</b><p>${esc(d)}</p></div></div>`).join("");
+  // corridas
+  const runs=[];for(let m=0;m<=MON.corte;m+=15){const e=s.ev.filter(x=>x.t>m-15&&x.t<=m);runs.push({m,n:e.length,err:e.filter(x=>x.open).length,warn:e.filter(x=>x.warn||x.wu==="retry"||x.wx==="retry").length})}
+  const live=s.ev.filter(e=>e.live&&e.t>runs[runs.length-1].m); if(live.length)runs.push({m:MON.corte,n:live.length,err:0,warn:0,live:1});
+  $("#monRuns").innerHTML=`<thead><tr><th>Corrida</th><th class="num">Registros</th><th>Resultado</th><th class="num">Duración</th></tr></thead><tbody>`+runs.reverse().map((r,i)=>`<tr><td>${hhmm(r.m)}${r.live?' <span class="chip orange">demo</span>':""}</td><td class="num">${r.n}</td><td>${r.err?'<span class="st-err">Con errores</span>':r.warn?'<span class="st-warn">OK con avisos</span>':'<span class="st-ok">OK</span>'}</td><td class="num">${(2+r.n*0.4+((r.m*7)%10)/10).toFixed(1)} s</td></tr>`).join("")+"</tbody>";
+}
+
+/* ---------- Implementación ---------- */
+function renderImpl(){
+  const ph=[["Relevamiento y accesos","Diccionario de datos, acceso al sistema, credenciales",1,2],["Middleware y estandarización","Ingesta, reglas, perfil unificado, calidad",2,4],["Integración WoowUp","Clientes, compras por sucursal, segmentos",4,5],["Integración Wise CX","Contactos, campos y ruteo por cola",5,6],["Monitoreo y campañas piloto","Reportes por módulo, alertas, 2 campañas",6,7],["Puesta en producción","Go-live, ajustes y capacitación",8,8]];
+  const cols=["var(--muted)","var(--blue)","var(--woow)","var(--wise)","var(--cyan)","var(--green)"];
+  $("#gantt").innerHTML=`<div class="gr"><span></span>${[1,2,3,4,5,6,7,8].map(w=>`<span class="gh">Sem ${w}</span>`).join("")}</div>`+ph.map(([t,d,a,b],i)=>`<div class="gr"><div class="gl"><b>${t}</b><small>${d}</small></div>${[1,2,3,4,5,6,7,8].map(w=>`<span class="${w>=a&&w<=b?"bar":"cell"}" ${w>=a&&w<=b?`style="background:${cols[i]}"`:""}></span>`).join("")}</div>`).join("");
+  const needs=[["Acceso a los datos","Vista de solo lectura sobre la base del sistema de gestión, o exportaciones programadas (CSV por SFTP) de socios, préstamos y turismo.","Sistemas"],["Diccionario de campos","Significado de cada campo y estado, tipos de documento en uso y catálogo de campañas.","Sistemas"],["Credenciales de WoowUp y Wise CX","Claves de API con permisos de escritura, en un entorno de prueba si existe.","Sistemas"],["Colas y reglas de atención","Áreas de Wise CX que atienden Turismo y Préstamos y criterios de derivación.","Atención"],["Validación de segmentos","Revisión de las reglas (renovación, venta cruzada, reactivación) con los referentes de cada área.","Turismo · Préstamos"],["Consentimientos","Base de socios que aceptaron recibir WhatsApp y email, para filtrar las campañas.","Legales · Marketing"],["Referente por área","Una persona de Turismo y una de Préstamos para validar y aprobar cada fase.","Gerencia"]];
+  $("#needs").innerHTML=needs.map(([t,d,r])=>`<div class="need"><div><b>${t}</b><p>${d}</p></div><span class="chip">${r}</span></div>`).join("");
+}
+
+/* ---------- Render ---------- */
+function renderStage(){
+  ({resumen:renderResumen,monitoreo:renderMonitor,implementacion:renderImpl,origen:renderOrigen,ingesta:renderIngesta,estandar:renderEstandar,perfil:renderPerfil,woowup:renderWoow,wise:renderWise})[state.stage]();
+}
+function init(){
+  $("#socioList").innerHTML=ORDER.map(d=>`<option value="${d} · ${PROFILES[d].apellido}, ${PROFILES[d].nombre}"></option>`).join("");
+  $("#socioInput").addEventListener("change",e=>{const d=e.target.value.split(" ")[0];if(PROFILES[d])selectSocio(d);else{const f=ORDER.find(x=>(PROFILES[x].apellido+" "+PROFILES[x].nombre).toLowerCase().includes(e.target.value.toLowerCase()));if(f)selectSocio(f)}});
+  $("#prevS").onclick=()=>selectSocio(ORDER[(ORDER.indexOf(state.dni)-1+ORDER.length)%ORDER.length]);
+  $("#nextS").onclick=()=>selectSocio(ORDER[(ORDER.indexOf(state.dni)+1)%ORDER.length]);
+  $$("#srcTabs .subtab").forEach(b=>b.onclick=()=>{state.src=b.dataset.t;renderOrigen()});
+  $("#srcSearch").oninput=renderOrigen;$("#onlySel").onchange=renderOrigen;
+  $("#runSync").onclick=()=>runSync();$("#runSync2").onclick=()=>runSync();
+  $("#simLoan").onclick=simLoan;$("#simTrip").onclick=simTrip;
+  $("#resetSim").onclick=()=>{state.extraP=[];state.extraT=[];DATA=build();if(MON)MON.ev=MON.ev.filter(e=>!e.live);state.lastRun=null;renderIngesta();toast("Simulaciones deshechas")};
+  $$("#wuTabs .subtab").forEach(b=>b.onclick=()=>{state.wuTab=b.dataset.t;renderWoow()});
+  $("#wxSend").onclick=wxSend;
+  $("#cAud").onchange=()=>{const a=calcAuds().find(x=>x.k===$("#cAud").value);$("#cTicket").value=Math.round(a.ticket/1000)*1000;renderCalc()};
+  ["#cBase","#cConv","#cTicket"].forEach(s=>$(s).oninput=renderCalc);$("#wxMsg").onchange=()=>{wxConv=[];renderWise()};
+  let d="23317379",s="resumen";try{d=localStorage.getItem("amr_dni")||d;s=localStorage.getItem("amr_stage")||s}catch(e){}
+  const h=location.hash.slice(1); if(STAGES.some(x=>x[0]===h))s=h;
+  if(!PROFILES[d])d=ORDER[0];
+  state.dni=d;const p=cur();$("#socioInput").value=`${p.dni} · ${p.apellido}, ${p.nombre}`;
+  go(s);
+}
+init();
+</script>
+
+</body></html>
